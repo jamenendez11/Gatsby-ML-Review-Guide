@@ -1,0 +1,1640 @@
+\documentclass[a4paper]{article}
+
+%% Language and font encodings
+\usepackage[english]{babel}
+\usepackage[utf8x]{inputenc}
+\usepackage[T1]{fontenc}
+
+%% Sets page size and margins
+\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+%% Useful packages
+\usepackage{amsmath,amssymb}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+
+%% My commands
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+\allowdisplaybreaks[1]
+
+\title{Gatsby ML Exam Review Guide}
+\author{Jorge A. Menendez}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% UNSUPERVISED MODELS %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Unsupervised Latent Variable Models}
+%%%%%%%%% GAUSSIAN MODEL %%%%%%%%%
+\subsection{Gaussian Model}
+Given i.i.d. data $\mathcal{D} = \{\mathbf{x}^{(i)}\}_{i=1}^N, \mathbf{x}\in\mathbb{R}^D$, the Gaussian models data means and correlations between dimensions/features $x^{(i)}_1,\ldots,x^{(i)}_D$:
+\begin{gather*}
+\mathbf{x} \sim \mathcal{N}(\mu,\Sigma) \\
+\mathcal{N}(\mathbf{x}|\mu,\Sigma) = |2\pi\Sigma|^{-\frac{1}{2}}\exp\left[-\frac{1}{2}\left(\mathbf{x}-\mu\right)^\textrm{T}\Sigma^{-1}\left(\mathbf{x}-\mu\right)\right]
+\end{gather*}
+The maximum likelihood parameter estimates are:
+\begin{align*}
+\mu^{\textrm{ML}} &= \frac{1}{N}\sum_{i=1}^N \mathbf{x}^{(i)} \\
+\Sigma^{\textrm{ML}} &= \frac{1}{N}\sum_{i=1}^N (\mathbf{x}^{(i)}-\mu^\textrm{ML})(\mathbf{x}^{(i)}-\mu^\textrm{ML})^\textrm{T}
+\end{align*}
+It turns out that the ML estimate for the covariance $\Sigma$ is biased ($\mathbb{E}\left[\Sigma^\textrm{ML}\right] = \frac{N-1}{N} \Sigma$) because it involves estimating deviations of the data from our estimate of the mean $\mu^\textrm{ML}$ that is itself based on the data, leading to underestimating the true expected deviation. So we usually use the alternative unbiased estimate
+\[\Sigma^\textrm{ML}_{unbiased} = \frac{N}{N-1}\Sigma^\textrm{ML} = \frac{1}{N-1}\sum_{i=1}^N (\mathbf{x}^{(i)}-\mu)(\mathbf{x}^{(i)}-\mu)^\textrm{T}\]
+Bayesian parameter estimation is easy and tractable when using the following conjugate priors:
+\begin{table}[H]
+\centering
+\begin{tabular}{l|r}
+Parameter & Conjugate Prior \\\hline
+$\mu$ & Gaussian \\
+$\sigma^{-1}$ & Gamma \\
+$\Sigma^{-1}$ & Weishart \\
+$\sigma$ & Inverse Gamma \\
+$\Sigma$ & Inverse Weishart
+\end{tabular}
+\end{table}
+Assuming the likelihood $\mathbf{x}^{(i)}\sim\mathcal{N}(\mu,\Sigma_\mathcal{D})$, this yields the following posterior distributions for $\mu$ and, in the one dimensional case, $\sigma^{-1}$, where $\mu^\textrm{ML}$ and $\sigma^\textrm{ML}$ are as above:
+\begin{gather*}
+\mu \sim \mathcal{N}(\mu_0,\Sigma_0) \\
+\mu|\mathcal{D} \sim \mathcal{N}\left(\Sigma^*(\Sigma_0^{-1}\mu_0 + N\Sigma_\mathcal{D}^{-1}\mu^\textrm{ML}),\Sigma^*\right) \\
+\Sigma^* = (\Sigma_0^{-1} + N\Sigma_\mathcal{D}^{-1})^{-1} \\
+\sigma^{-1} \sim \textrm{Gamma}\left(a_0,b_0\right) \\
+\sigma^{-1}|\mathcal{D} \sim \textrm{Gamma}\left(a_0 + \frac{N}{2},b_0 + \frac{N}{2}\sigma^\textrm{ML}\right)
+\end{gather*}
+
+\subsubsection{Student \emph{t}-distribution}
+One common Bayesian approach when it comes to modelling data with a Gaussian is to assume that the mean $\mu$ is known (e.g. that the true mean is equal to the ML estimate) and the variance $\sigma$ is unknown, such that we should estimate the true data distribution by integrating over all values of $\sigma$. In other words, we should average together all possible Gaussian distributions with mean $\mu$ together, each one weighed by the prior probability of its corresponding variance $\sigma$. When we use the prior
+\[\sigma^{-1} \sim \textrm{Gamma}\left(\frac{\nu}{2},\frac{\nu}{2}\right)\]
+we get the Student \emph{t}-distribution:
+\begin{align*}
+\textrm{St}(x|\mu,\nu) &= \int \mathcal{N}(x|\mu,\sigma) \textrm{Gamma}\left(\sigma^{-1}|\frac{\nu}{2},\frac{\nu}{2}\right) \textrm{d}\sigma^{-1} \\
+&= \frac{1}{\sqrt{\nu\pi}}\frac{\Gamma(\frac{\nu+1}{2})}{\Gamma(\frac{\nu}{2})}\left(\frac{x^2}{\nu} + 1\right)^{-\frac{\nu + 1}{2}}
+\end{align*}
+where the parameter $\nu$ is called the degrees of freedom. This can be generalized to the multi-dimensional case using a Weishart distribution instead of a Gamma for the prior on the precision.
+
+\subsubsection{A note about the covariance matrix}
+For some intuition behind the structure of the covariance matrix of a multivariate Gaussian, consider the variance of the data along some direction $\mathbf{v} \in \mathbb{R}^D, \mathbf{v}^\textrm{T}\mathbf{v}$, where $\mathbb{R}^D$ is the data space (i.e. $\mathbf{x}^{(i)}\in \mathbb{R}^D$). For some data set $\{\mathbf{x}^{(i)}\}_{i=1}^N$, we naturally compute this by taking the squared scalar projection of each data point's deviation from the mean $\bar{\mathbf{x}}$ onto $\mathbf{v}$, and averaging:
+\begin{align*}
+\frac{1}{N}\sum_{i=1}^N &(\mathbf{v}^\textrm{T}(\mathbf{x}^{(i)} - \bar{\mathbf{x}}))^2 \\
+&= \frac{1}{N}\sum_{i=1}^N \mathbf{v}^\textrm{T}(\mathbf{x}^{(i)} - \bar{\mathbf{x}})(\mathbf{x}^{(i)} - \bar{\mathbf{x}})^\textrm{T}\mathbf{v} \\
+&= \mathbf{v}^\textrm{T}\left(\frac{1}{N}\sum_{i=1}^N(\mathbf{x}^{(i)} - \bar{\mathbf{x}})(\mathbf{x}^{(i)} - \bar{\mathbf{x}})^\textrm{T}\right)\mathbf{v} \\
+&= \mathbf{v}^\textrm{T}\mathbf{C}\mathbf{v} \\
+\end{align*}
+where $\bar{\mathbf{x}} = \frac{1}{N}\sum_i \mathbf{x}^{(i)}$ is the empirical mean and $\mathbf{C}=\frac{1}{N}\sum_{i=1}^N(\mathbf{x}^{(i)} - \bar{\mathbf{x}})(\mathbf{x}^{(i)} - \bar{\mathbf{x}})^\textrm{T}$ is the empirical covariance matrix (equal to their respective maximum likelihood estimates $\mu^\textrm{ML},\Sigma^\textrm{ML}$). Note now that if $\mathbf{v}$ is an eigenvector of $\mathbf{C}$, then
+\[ \mathbf{v}^\textrm{T}\mathbf{C}\mathbf{v} = \lambda \mathbf{v}^\textrm{T}\mathbf{v} = \lambda \]
+i.e. the correponding eigenvalue $\lambda$ gives the variance in that direcion.
+
+%%%%%%%%% GAUSSIAN LATENT VARIABLE MODELS %%%%%%%%%
+\subsection{Continuous Latent Variable Models}
+%%%%%%%%% PPCA %%%%%%%%%
+\subsubsection{Probabilistic Principal Components Analysis (PPCA)}
+For i.i.d. data $\mathcal{D} = \{\mathbf{x}^{(i)}\}_{i=1}^N, \mathbf{x}\in\mathbb{R}^D$, we assume they arise from a noisy linear transformation of an underlying set of latent variables $\{\mathbf{y}^{(i)}\}, \mathbf{y}\in\mathbb{R}^K$, $K<D$, via a $D\times K$ \emph{loading matrix} $\mathbf{A}$:
+\begin{gather*}
+\mathbf{y} \sim \mathcal{N}(0,\mathbf{I}) \\
+\mathbf{x}|\mathbf{y} \sim \mathcal{N}(\mathbf{Ay+b},\sigma \mathbf{I})
+\end{gather*}
+By inferring the latents corresponding to each data point, we can hope to compress the data into this lower dimensional subspace without losing too much information, just like in regular PCA. The only differnece is that here we have a prior on where the latents should be - we model noise in the latents as well as in the data.
+
+This yields the following log likelihood:
+\[ \ell(\mathbf{b,A},\sigma) = \log P(\mathcal{D}|\mathbf{b,A},\sigma) = \sum_{i=1}^N\log\mathcal{N}\left(\mathbf{x}^{(i)}|\mathbf{b},\sigma \mathbf{I} + \mathbf{AA}^\textrm{T}\right) \]
+It is easy to verify that the ML estimate for $\mathbf{b}$ is the empirical mean:
+\[ \mathbf{b}^\textrm{ML} = \frac{1}{N}\sum_{i=1}^N \mathbf{x}^{(i)} \]
+The ML estimate for the loading matrix is a bit more complicated:
+\begin{align*}
+\frac{\partial \ell}{\partial \mathbf{A}} &= \frac{\partial}{\partial \mathbf{A}}\left( -\frac{N}{2}\log |\sigma \mathbf{I} + \mathbf{AA}^\textrm{T}| - \frac{1}{2} \textrm{Tr}\left[ (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} \sum_{i=1}^N (\mathbf{x}_i-\mathbf{b})(\mathbf{x}_i-\mathbf{b})^\textrm{T} \right]\right) \\
+&= \left(-\frac{N}{2}(\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} + \frac{N}{2} (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} \mathbf{C} (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1}\right) \frac{\partial (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})}{\partial \mathbf{A}} \\
+&= -N(\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1}\mathbf{A} + (\sigma \mathbf{I} + N\mathbf{AA}^\textrm{T})^{-1} \mathbf{C} (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} \mathbf{A} = 0 \\
+\Leftrightarrow \mathbf{A} &= \mathbf{C} (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} \mathbf{A}
+\end{align*}
+where $\mathbf{C}$ is the empirical covariance matrix
+\[\mathbf{C} = \frac{1}{N}\sum_{i=1}^N (\mathbf{x}^{(i)}-\mu^\textrm{ML})(\mathbf{x}^{(i)}-\mu^\textrm{ML})^\textrm{T} \]
+We thus have two possible solutions for the maximum likelihood estimate: (1) $\mathbf{A}^\textrm{ML} = \mathbf{0}$, which gives us a standard isotropic Gaussian model of the data centered at the empirical mean (pointless), or, (2) $\sigma \mathbf{I} + {\mathbf{A}^\textrm{ML}\mathbf{A}^\textrm{ML}}^\textrm{T} = \mathbf{C}$, which gives us the following solution:
+\begin{align*}
+\mathbf{C} &= \sigma \mathbf{I} + \mathbf{A}\mathbf{A}^\textrm{T} \\
+&= \sigma \mathbf{I} + \mathbf{UDV}^\textrm{T}\mathbf{VD}^\textrm{T}\mathbf{U}^\textrm{T} \\
+&= \sigma \mathbf{I} + \mathbf{U}_K \mathbf{D}^2 \mathbf{U}_K^\textrm{T} \\
+&= \mathbf{U}_K (\sigma \mathbf{I} + \mathbf{D}^2)\mathbf{U}_K^\textrm{T} \\
+\Leftrightarrow \mathbf{C}\mathbf{U}_K &= \mathbf{U}_K (\sigma \mathbf{I} + \mathbf{D}^2)
+\end{align*}
+where in the second line we took the SVD of $\mathbf{A}$ and in the third line we took
+\begin{gather*}
+\mathbf{U}_K = \begin{bmatrix} \mathbf{u}_1 && \ldots && \mathbf{u}_K \end{bmatrix} \\
+\mathbf{D}^2=
+\begin{bmatrix}
+d_{11}^2 & \ldots & \ldots & 0 \\
+\vdots & d_{22}^2 & \ldots & \vdots \\
+\vdots & \vdots & \ddots & \vdots \\
+0 & \vdots & \ldots & d_{KK}^2
+\end{bmatrix}
+\end{gather*}
+Noting that the last line of the derivation tells us that each $\mathbf{u}_i$ is an eigenvector of $\mathbf{C}$ with associated eigenvalue $\lambda_i = d_{ii}^2 + \sigma$, we have the solution $\mathbf{A}^\textrm{ML} = \mathbf{U}_K \mathbf{DV}^\textrm{T}$, where $\mathbf{V}$ is an arbitrary $K \times K$ orthogonal matrix, the columns of $\mathbf{U}_K$ are $K$ eigenvectors of the empirical covariance $\mathbf{C}$, and $\mathbf{D}$ is a $K\times K$ diagonal matrix with components $d_{ii} = \sqrt{\lambda_i - \sigma}$. We can further show that the log likelihood is maximized when $\mathbf{u}_1,\lambda_1,\ldots,\mathbf{u}_K,\lambda_K$ are the $K$ leading eigenvectors and eigenvalues of $\mathbf{C}$. Noting first that
+\begin{align*}
+\sigma \mathbf{I} + {\mathbf{A}^\textrm{ML}\mathbf{A}^\textrm{ML}}^\textrm{T} &= \sigma \mathbf{I} + \mathbf{U}_K\mathbf{D}^2\mathbf{U}_K^\textrm{T} \\
+&= \mathbf{U}_K (\sigma \mathbf{I} + \mathbf{D}^2)\mathbf{U}_K^\textrm{T} \\
+&= \mathbf{U}_K
+\begin{bmatrix}
+\lambda_1 & \ldots & 0 \\
+\vdots & \ddots & \vdots \\
+0 & \ldots & \lambda_K 
+\end{bmatrix}
+\mathbf{U}_K^\textrm{T} \\
+&= \mathbf{U}_K \mathbf{\Lambda}_K \mathbf{U}_K^\textrm{T} \\
+\left(\sigma \mathbf{I} + {\mathbf{A}^\textrm{ML}\mathbf{A}^\textrm{ML}}^\textrm{T}\right)^{-1} &= \left(\sigma \mathbf{I} + \begin{bmatrix} \mathbf{U}_K & \mathbf{U}_\perp \end{bmatrix} \begin{bmatrix} \mathbf{D}^2 & \mathbf{0} \\ \mathbf{0} & \mathbf{0} \end{bmatrix} \begin{bmatrix} \mathbf{U}_K^\textrm{T} \\ \mathbf{U}_\perp \end{bmatrix} \right)^{-1} \\
+&= \left(\mathbf{U} \begin{bmatrix} \sigma \mathbf{I} + \mathbf{D}^2 & \mathbf{0} \\ \mathbf{0} & \sigma \mathbf{I} \end{bmatrix} \mathbf{U}^\textrm{T} \right)^{-1} \\
+&= \mathbf{U} \begin{bmatrix} \mathbf{\Lambda}_K^{-1} & \mathbf{0} \\ \mathbf{0} & \sigma^{-1} \mathbf{I} \end{bmatrix} \mathbf{U}^\textrm{T} \\
+\end{align*}
+where $\mathbf{U}_\perp$ is the matrix with the remaining eigenvectors of $\mathbf{C}$ that are orthogonal to those in $\mathbf{U}_K$, such that $\begin{bmatrix} \mathbf{U}_K & \mathbf{U}_\perp \end{bmatrix} = \mathbf{U}$ is an invertible square orthogonal matrix. We then have that:
+\begin{align*}
+\ell(\mathbf{b,A},\sigma) &= -\frac{ND}{2}\log 2\pi - \frac{N}{2}\log |\sigma \mathbf{I} + \mathbf{AA}^\textrm{T}| - \frac{N}{2} \textrm{Tr}\left[ (\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})^{-1} \mathbf{C} \right] \\
+&= - \frac{N}{2}\log |\mathbf{U}_K \mathbf{\Lambda}_K \mathbf{U}_K^\textrm{T}| - \frac{N}{2} \textrm{Tr}\left[ \mathbf{U} \begin{bmatrix} \mathbf{\Lambda}_K^{-1} & \mathbf{0} \\ \mathbf{0} & \sigma^{-1} \mathbf{I} \end{bmatrix} \mathbf{U}^\textrm{T} \mathbf{U} \mathbf{\Lambda} \mathbf{U}^\textrm{T}\right] + \text{const.} \\
+&= - \frac{N}{2}\log \prod_{i=1}^K \lambda_i - \frac{N}{2} \textrm{Tr}\left[ \mathbf{U} \begin{bmatrix} \mathbf{I} & \mathbf{0} \\ \mathbf{0} & \sigma^{-1} \mathbf{\Lambda}_\perp \end{bmatrix} \mathbf{U}^\textrm{T}\right] + \text{const.} \\
+&= -\frac{N}{2}\left( \sum_{d=1}^K \log \lambda_d + \frac{1}{\sigma}\sum_{d=K+1}^D \lambda_d + K \right) + \text{const.} \\
+\end{align*}
+To maximize the likelihood, we need to minimize the sum inside the parentheses, which means we should make $\lambda_{K+1},\ldots,\lambda_N$ as small as possible since $z$ increases faster than $\log z$. Thus, these should be the $D-K$ smallest eigenvalues, leaving $\lambda_1,\ldots,\lambda_K$ to be the $K$ largest eigenvalues of $\mathbf{C}$, with associated eigenvectors $\mathbf{u}_1,\ldots,\mathbf{u}_K$, the columns of $\mathbf{U}_K$. This completes the derivation of $\mathbf{A}^\textrm{ML}$. If we now take the derivative of the last line with respect to $\sigma$, we get our ML estimate for the noise parameter:
+\[\sigma^\textrm{ML} = \frac{1}{D-K}\sum_{d=K+1}^D \lambda_d\]
+i.e. the mean of the $D-K$ smallest eigenvalues. \todo{something missing in my log likelihood: there should be a $+(D-K)\log \sigma$ in the last line, would get this from a $\log|\sigma \mathbf{I}_{D-K}|$ term in the log likelihood}
+
+We can get some intuition for these two ML estimates by calculating the variance of the marginal distribution of an observation $P(\mathbf{x}) = \mathcal{N}\left(\mathbf{x}|\mathbf{b},\sigma \mathbf{I} + \mathbf{AA}^\textrm{T}\right)$ along an arbitrary direction $\mathbf{v}$ by computing the projection of the column space of the covariance matrix onto this unit vector: $\mathbf{v}^\textrm{T}(\sigma \mathbf{I} + \mathbf{AA}^\textrm{T})\mathbf{v}$. It is easy to see that, if $\mathbf{A} = \mathbf{A}^\textrm{ML}$, for any direction $\mathbf{v}$ orthogonal to the latent space spanned by the $K$ leading eigenvectors $\mathbf{u}_1,\ldots,\mathbf{u}_K$ of $\mathbf{C}$, the variance along that direction will be $\sigma$ (since $\mathbf{v}^\textrm{T}\mathbf{A}^\textrm{ML} = 0$). Thus, $\sigma^\textrm{ML}$ should be the mean variance along the data dimensions outside the latent space. Conversely, if $\mathbf{v} = \mathbf{u}_k, k\leq K$, the variance along that direction will be $\lambda_k$ (since $\mathbf{v}^\textrm{T}\mathbf{A}^\textrm{ML}{\mathbf{A}^\textrm{ML}}^\textrm{T}\mathbf{v} = (\sqrt{\lambda_k - \sigma})^2 = \lambda_k - \sigma$).  
+
+In this view, it is easy to see that the limit of $\sigma \rightarrow 0$ is standard principal components analysis (PCA), where the data is projected onto a subspace formed by the $K$ leading eigenvectors of the empirical covariance matrix . One important difference between PPCA and PCA, however, is that, whereas the PCA projection onto the principal subspace is simply an orthogonal projection, the projection of observations onto the latent space in PCA is pulled away from the orthogonal projection by the prior latent distribution (towards its mean). We can see this easily by computing the posterior distribution over latents:
+\[ \mathbf{y}|\mathbf{x} \sim \mathcal{N}\left((\sigma + \mathbf{A}^\textrm{T}\mathbf{A})^{-1}\mathbf{A}^\textrm{T}(\mathbf{x-b}),(\mathbf{I} + \sigma^{-1}\mathbf{A}^\textrm{T}\mathbf{A})^{-1} \right) \]
+As $\sigma \rightarrow 0$, the posterior becomes a delta function centered at the orthogonal projection of the centered observation. Conversely, as $\sigma$ gets bigger, the magnitude of this projection gets smaller and smaller, getting pulled towards the 0-mean of the latent distribution. The same difference holds for the ``denoised'' reconstruction $\tilde{\mathbf{x}} = \mathbf{A}\mathbb{E}[\mathbf{y}|\mathbf{x}] = \mathbf{A}(\sigma + \mathbf{A}^\textrm{T}\mathbf{A})^{-1}\mathbf{A}^\textrm{T}(\mathbf{x-b})$.
+
+Going back to the likelihood function, we note that $\mathbf{A}^\textrm{ML}{\mathbf{A}^\textrm{ML}}^\textrm{T} = \mathbf{UD}^2 \mathbf{U}^\textrm{T}$, such that changing the matrix $\mathbf{V}$ doesn't change the likelihood. Thus, the loading matrix is non-identifiable - any change to $\mathbf{V}$ (i.e. any orthogonal transformation $\mathbf{A} \rightarrow \mathbf{AU}'$, for orthogonal $\mathbf{U}'$) leaves the model unchanged. More than that, any rotation of the latent space $\mathbf{y} \rightarrow \mathbf{Uy}$ has the same null effect. To compare the loading matrices of any two PPCA models we must then compare their eigenspectrum, since they may look completely different yet represent the same linear transformation. This observation also means that the number of parameters is not just $DK + 1$ (1 for $\sigma$, 1 for each component of $\mathbf{A}$) - we need to correct for the degeneracy. The correction is easy to see by computing the number of parameters needed to specify $\mathbf{U}_K \mathbf{D}$, since we should really just fix $\mathbf{V}$. Since $\mathbf{U}_K$ is orthonormal, we only need $D-1$ numbers in the first column to fully specify it (since it must have length 1), $D-2$ to specify the next one that is orthogonal to the first one, and so on, giving us:
+\[ (D-1) + (D-2) + \ldots + (D-K) + K = DK - (1 + 2 + \ldots + K) + K = DK - \frac{K(K+1)}{2} + K = DK - \frac{K(K-1)}{2} \]
+Thus, the true number of parameters in the PPCA model is $DK - \frac{K(K-1)}{2} + 1$. Note that this number can't surpass the number of parameters needed to specify the covariance matrix of the observed data, or else the model becomes totally non-identifiable. Intuitively, if this were the case then it would be impossible to know what observed variance arose from the spherical emission noise or from the latent noise, since the resulting model would be able to fit itself to more noise than is even possible in the data. One can easily verify that this condition, i.e.
+\[ DK - \frac{K(K-1)}{2} + 1 \leq \frac{D(D+1)}{2} \]
+is equivalent to enforcing $K \leq D-1$.
+
+Lastly, note that the spherical emission noise makes the PPCA model invariant to rotations of the data $\mathbf{x} \rightarrow \mathbf{Rx}$, where $\mathbf{R}$ is a $D\times D$ orthogonal matrix. Any such transformation is simply offset by an equal transformation to the loading matrix $\mathbf{A} \rightarrow \mathbf{RA}$, since a rotation of the data space leads to the same rotation to its covariance matrix and thus to its eigenvectors, which compose $\mathbf{A}$. Because the emission noise $\sigma \mathbf{I}$ is spherical (i.e. equal in every direction), the rotation leaves the model unchanged. We thus say that the PPCA model is \emph{rotationally invariant}.
+
+%%%%%%%%% FA %%%%%%%%%
+\subsubsection{Factor Analysis}
+The factor analysis model is the generalization of the PPCA model to non-spherical noise:
+\begin{gather*}
+\mathbf{y} \sim \mathcal{N}(0,\mathbf{I}) \\
+\mathbf{x}|\mathbf{y} \sim \mathcal{N}(\mathbf{Ay+b},\mathbf{\Psi})
+\end{gather*}
+where $\mathbf{\Psi}$ is a diagonal matrix. In the terminology of factor analysis, we call the loading matrix the \emph{common factors} and the independent emissions noise parameters $\psi_{dd}$ the \emph{unique factors}. The classic example of data suitable for modelling with FA is performance on a battery of $D$ intelligence tests: variability on \emph{each} test will be different for all subjects because of differing attentional or other demands, but variability on \emph{all} tests for a given subject will also be constrained by his/her (latent) intelligence.
+
+In the case of non-spherical noise, there is no closed form solution for maximum likelihood parameter estimation, so we use gradient ascent or the EM algorithm. This leads to the following M-step updates:
+\begin{align*}
+\mathbf{A}^* &= \left(\sum_{i=1}^N \mathbf{x}^{(i)}\mu_i^\textrm{T}\right)\left(N\Sigma + \sum_{i=1}^N\mu_i\mu_i^\textrm{T}\right)^{-1} \\
+\mathbf{\Psi}^* &= \mathbf{A}\Sigma\mathbf{A}^\textrm{T} + \frac{1}{N}\sum_{i=1}^N (\mathbf{x}^{(i)} - A\mu_i)(\mathbf{x}^{(i)} - A\mu_i)^\textrm{T}
+\end{align*}
+where $\mu_i$ and $\Sigma$ are the parameters of the posterior distribution over latents
+\begin{gather*}
+P(\mathbf{y}^{(i)}|\mathbf{x}^{(i)},\mathbf{A},\mathbf{\Psi}) = \mathcal{N}(\mu_i,\Sigma) \\
+\mu_i = \Sigma \mathbf{A}^\textrm{T}\mathbf{\Psi}^{-1}(\mathbf{x}^{(i)} - \mathbf{b}) \\
+\Sigma = (\mathbf{I} + \mathbf{A}^\textrm{T}\mathbf{\Psi}^{-1}\mathbf{A})^{-1}
+\end{gather*}
+Note that as $\Sigma \rightarrow 0$ (i.e. as $\Psi_{dd} \rightarrow 0$), these equations approach the the ML (i.e. least squares) solution for linear regression, with the expected latents in place of the inputs and the observations in place of the outputs. We can thus see FA as the generalization of linear regression to noisy inputs (in linear regression we treat the inputs as known). One caveat to ML learning for FA is that in some cases the data favors $\psi_{dd}\rightarrow 0$, leading to an unbounded likelihood (``Heywood cases''). This problem can be solved by choosing an appropriate prior over $\psi_{dd}$.
+
+Again, the loading matrix $\mathbf{A}$ is not unique, since the likelihood remains unchanged under orthogonal transformations $\mathbf{A}\rightarrow \mathbf{AU}$ for orthogonal $\mathbf{U}$. Because we now have to pick each of the $K$ components on the diagonal of $\mathbf{\Psi}$, the number of parameters is now
+\[DK - \frac{K(K-1)}{2} + K \]
+Enforcing this to be less than $\frac{D(D+1)}{2}$ implies that $K$ be significantly less than $D$. \todo{I'm not exactly sure how much less, but I have verified that it must be less than $D-1$}
+
+Because of the non-spherical noise, the FA model is not rotationally invariant. On the other hand, it is scale invariant, since the $\psi_{dd}$'s can adapt to a change in scale.
+
+%%%%%%%%% ICA %%%%%%%%%
+\subsubsection{Independent Components Analysis (ICA)}
+The ICA model is similar to FA, but with two major changes:
+\begin{itemize}
+\item the latent distribution $P(\mathbf{y})$ is strictly non-Gaussian, and constrained to be factorizable into the ``independent''components $y_k$
+\item $K \geq D$ is acceptable, since we are no longer modelling the data as being Gaussian (i.e. the likelihood is not Gaussian)
+\end{itemize}
+Specifically, we have:
+\begin{gather*}
+y_k \sim \mathcal{P}_y \\
+\Rightarrow P(\mathbf{y}) = \prod_k \mathcal{P}_y(y_k) \\
+\mathbf{x}|y \sim \mathcal{N}(\mathbf{Ay},\mathbf{\Psi})
+\end{gather*}
+Generally, the context of ICA is that we have $K$ independent sources $y_k$ that we want to estimate given some observed signal $\mathbf{x}$ that was generated by a (noisy) linear combination of the sources. The classic example is the ``cocktail party problem'', where one wants to recover individual conversations at a party from a sound signal being measured from the whole room (e.g. from your ears). Because each conversation is occuring between a different group of people, each of these ``sources'' is independent. The goal is thus to obtain a good estimate of the demixing matrix $\mathbf{W} \approx \mathbf{A}^{-1}$, such that we can recover the sources $\mathbf{y} \approx \hat{\mathbf{y}} = \mathbf{Wx}$.
+
+Because $\mathcal{P}_y$ is non-Gaussian, however, inference is generally intractable. One extensively studied case where it is tractable is called \emph{square, noiseless causal ICA}, where $K=D$ (so $\mathbf{A}$ is square and invertible) and $\mathbf{x} = \mathbf{Ay}$. In this case, we can obtain the likelihood as follows: for $\textrm{d}\mathbf{x},\textrm{d}\mathbf{y}$ such that
+\[ P_x(\mathbf{x})\textrm{d}\mathbf{x} = P_y(\mathbf{y})\textrm{d}\mathbf{y} \\ \]
+we have
+\begin{align*}
+\Leftrightarrow P_x(\mathbf{x}) &= \Bigr| \frac{\textrm{d} \mathbf{y}}{\textrm{d} \mathbf{x}}\Bigr| P_y(\mathbf{y}) \\
+&= |\mathbf{W}| P_y(\mathbf{Wx}) \\
+&= |\mathbf{W}| \prod_k \mathcal{P}_y(\mathbf{W}_k \mathbf{x})
+\end{align*}
+where $\mathbf{W}_k$ is the $k$th row of $\mathbf{W}$. We then obtain our estimate of the demixing matrix $\mathbf{W}$ via maximum likelihood:
+\begin{align*}
+\frac{\partial}{\partial \mathbf{W}} \ell(\mathbf{W}) &= \frac{\partial}{\partial \mathbf{W}} \log|\mathbf{W}| + \sum_k \log \mathcal{P}_y(\mathbf{W}_k \mathbf{x}) \\
+&= \left(\mathbf{W}^\textrm{T}\right)^{-1} + \frac{\partial}{\partial \mathbf{y}} \sum_k \log \mathcal{P}_y(y_k) \frac{\partial \mathbf{y}}{\partial \mathbf{W}} \\
+&= \left(\mathbf{W}^\textrm{T}\right)^{-1} + \mathcal{P}'(\mathbf{y}) \mathbf{x}^\textrm{T}
+\end{align*}
+where $\mathcal{P}'(\mathbf{y})$ is a vector whose $k$th component is $\frac{\partial \log \mathcal{P}_y(y)}{\partial y} \Bigr|_{y_k}$. We can then update $\mathbf{W}$ via gradient ascent:
+\[ \Delta \mathbf{W} = \left(\mathbf{W}^\textrm{T}\right)^{-1} + \mathcal{P}'(\mathbf{y}) \mathbf{x}^\textrm{T} \]
+
+Another approach to square noiseless ICA is to find the demixing matrix that maximizes the information between something and something, called infomax. \todo{don't really understand Maneesh's derivation for this. Arthur's makes sense but its a bit weird}
+
+\subsubsection{Gaussian Process Latent Variable Model (GPLVM)}
+The GPLVM is an alternative approach to PPCA for inferring latents in a lower dimensional space, under the assumption of spherical noise in the data. The GPLVM differs from PPCA in that, rather than modelling noise in the latent space, it instead models noise in the latent-to-observation mapping, assuming the latents to be fixed and noiseless. This results in solving a ``dual'' problem with respect to PPCA, and allows us to perform non-linear dimensionality reduction.
+
+In PPCA, we (1) marginalize out the \emph{latents} to obtain a likelihood as a function of the latent-to-observation mapping (i.e. the loading matrix), (2) optimize the likelihood with respect to this (linear) \emph{mapping}, and (3) compute posteriors using this mapping to infer the lower-dimensional latents. In GPLVM, on the other hand, we (1) marginalize out the \emph{mapping} to obtain a likelihood as a function of the latents and  (2) optimize the likelihood with respect to the \emph{latents}. This difference stems from the fact that in PPCA we assume a prior distribution on the latents, whereas in GPLVM we assume the latents to be fixed and instead assume a (GP) prior on the mappings. The model is as follows:
+\begin{gather*}
+f_d \sim \mathcal{GP}\left(0,k_d(\cdot,\cdot)\right) \\
+x_d|f_d,\mathbf{z} \sim \mathcal{N}\left(f_d(\mathbf{z}),\sigma\right)
+\end{gather*}
+giving us a likelihood for data $\{\mathbf{x}_i\}_{i=1}^N$ with associated latents $\mathcal{Z} = \{\mathbf{z}_i\}_{i=1}^N$:
+\begin{gather*}
+\mathbf{f}_d = \begin{bmatrix} f_d(z_1) & \ldots & f_d(z_N) \end{bmatrix}^\textrm{T} \\
+\mathbf{f}_d|\mathcal{Z} \sim \mathcal{N}(\mathbf{0},\mathbf{K}_d) \\
+\quad \mathbf{K}_{d,ij} = k_d(x_i,x_j) \\
+\mathbf{x}^{(d)} = \begin{bmatrix} x_{1d} & \ldots & x_{Nd} \end{bmatrix}^\textrm{T}
+\end{gather*}
+\begin{align*}
+\Rightarrow P(\mathbf{x}^{(d)}|\mathcal{Z}) &= \int \mathcal{N}(\mathbf{x}^{(d)}|\mathbf{f}_d,\sigma \mathbf{I}) \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \textrm{d}\mathbf{f}_d \\
+&= \mathcal{N}(\mathbf{x}^{(d)}|\mathbf{0},\sigma \mathbf{I} + \mathbf{K}_d) \\
+\ell(\mathcal{Z}) &= \sum_{d=1}^D \log \mathcal{N}(\mathbf{x}^{(d)}|\mathbf{0},\sigma \mathbf{I} + \mathbf{K}_d)
+\end{align*}
+By modelling the full $\mathbf{z}\rightarrow \mathbf{x}$ as consisting of a set of independent mappings $f_d:\mathbf{z}\rightarrow x_d$ for each dimension of the data space, we can capture all kinds of non-linear mappings. By inferring what these mappings are, we can then compress the data into the lower dimensional latent space by optimizing the log likelihood with respect to $\mathcal{Z}$. Note that since we are performing inference on the $N$-dimensional vectors $\mathbf{f}_d$, our posterior covariances will be $N\times N$ - rather than estimating the covariance between dimensions (by averaging over data points) to infer an underlying latent (as in PPCA), here we estimate the single-dimension covariance between data points (by averaging over dimensions) to infer the latent-to-observation mapping for that dimension. Intuitively, it turns out that if we use the linear covariance kernel $k_d(\mathbf{z},\mathbf{z}') = \alpha \mathbf{z}^\textrm{T}\mathbf{z}$ for all $d=1,\ldots,D$, we end up with the same solution as PPCA, but using the leading eigenvectors of $\mathbf{C}' = \frac{1}{D}\mathbf{X}^\textrm{T}\mathbf{X}$ rather than $\mathbf{C} = \frac{1}{N}\mathbf{XX}^\textrm{T}$ ($\mathbf{X}$ is $D\times N$ data matrix with $i$th column equal to $i$th data point $\mathbf{x}_i$).
+
+We can also incorporate other observation noise models into GPLVM. For example, we might want to use the GPLVM to compress data about the number of mutations in individual genetic profiles (see PCA slides). Each individual $i$ has $d=1,\ldots,D$ sites where $x_{id} \in \{0,1,2\}$ mutations can occur, with independent probabilities, giving us a binomial noise model. Importantly, the probability of a mutation may vary from site to site, so we model the sensitivity to mutation as a latent variable $f_d$. We thus have:
+\[ x_{id}|f_d \sim \phi(f_d)^{x_{id}}(1-\phi(f_d))^{2-x_{id}} \]
+where $\phi(u) = \frac{1}{1+e^{-u}}$ is the logistic function. Since the number of sites $D$ is really big, we would like to find a set of lower dimensional latents $\mathcal{Z} = \{\mathbf{z}_i\in\mathbb{R}^K\}$, $K<D$, that would give rise to our data set $\mathcal{X} = \{\mathbf{x}_i \in \mathbb{R}^D\}$. We incorporate these into our model by modelling $f_d$ to be a function of this lower dimensional latent. We further would like to model the variability in site-specific mutation sensitivity across individuals, so we put a Gaussian Process prior on the function $f_d(\cdot)$ to allow it to vary across individuals:
+\begin{gather*}
+x_{id}|f_d,\mathbf{z}_i \sim \phi(f_d(\mathbf{z}_i))^{x_{id}}(1-\phi(f_d(\mathbf{z}_i)))^{2-x_{id}} \\
+f_d(\cdot) \sim \mathcal{GP}(0,k_d(\cdot,\cdot))
+\end{gather*}
+giving us our final model
+\begin{gather*}
+x_{id}|\textrm{f}_{di} \sim \phi(\textrm{f}_{di})^{x_{id}}(1-\phi(\textrm{f}_{di}))^{2-x_{id}} \\
+\mathbf{f}_d|\mathcal{Z} \sim \mathcal{N}(\mathbf{0},\mathbf{K}_d)
+\end{gather*}
+where $\mathbf{K}_{d,ij} = k_d(\mathbf{z}_i,\mathbf{z}_j)$. To perform compression, we now want to find the set $\mathcal{Z}$ that maximizes the likelihood
+\[ P(\mathcal{X}|\mathcal{Z}) = \prod_{d=1}^D \int \textrm{d}\mathbf{f}_d\; \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \prod_{i=1}^N \phi(\textrm{f}_{di})^{x_{id}}(1-\phi(\textrm{f}_{di}))^{2-x_{id}} \]
+which is intractable. If we knew the latent $\mathbf{f}_d$'s, however, we could easily find the best $\mathcal{Z}$ by optimizing the latent-observation joint
+\begin{align*}
+P(\mathcal{X},\{\mathbf{f}_d\}|\mathcal{Z}) &= \prod_{d=1}^D P(\mathbf{f}_d|\mathcal{Z})P(\mathbf{x}^{(d)}|\mathbf{f}_d) \\
+&= \prod_{d=1}^D \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \prod_{i=1}^N \phi(\textrm{f}_{di})^{x_{id}}(1-\phi(\textrm{f}_{di}))^{2-x_{id}}
+\end{align*}
+So we proceed with the EM algorithm, iteratively inferring the $\mathbf{f}_d$'s at the E-step and obtaining our esimate for $\mathcal{Z}$ in the M-step, until convergence of the free energy lower bound to a maximum of the true log likelihood. Inference, however, is intractable in this problem since our (binomial) likelihood $P(\mathbf{x}^{(d)}|\mathbf{f}_d)$ and (Gaussian) prior $P(\mathbf{f}_d|\mathcal{Z})$ noise models are not conjugate. We thus turn to expectation propagation to perform an approximate E-step, approximating the binomial likelihood with a Gaussian. This results in the following approximate posterior $q(\{\mathbf{f}_d\})$ and cavity distribution $q_{\neg di}(f_{di})$:
+\begin{align*}
+P(\{\mathbf{f}_d\}|\mathcal{X,Z}) &= \frac{1}{Z}P(\{\mathbf{f}_d\},\mathcal{X}|\mathcal{Z}) \\
+&= \frac{1}{Z} \prod_{d=1}^D \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \prod_{i=1}^N \phi(\textrm{f}_{di})^{x_{id}}(1-\phi(\textrm{f}_{di}))^{2-x_{id}} \\
+&\approx \frac{1}{Z} \prod_{d=1}^D \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \prod_{i=1}^N \mathcal{N}(f_{di}|\tilde{\mu}_{di},\tilde{\sigma}_{di}) = q(\{\mathbf{f}_d\}) \\
+q_{\neg di}(f_{di}) &= \mathcal{N}(f_{di}|0,k_d(z_i,z_i))
+\end{align*}
+\todo{this is wrong! can't marginalize the $f_{d\neg i}$ just like that, need to separate the Gaussian on the full $\mathbf{f}_d$ into a distribution on $f_{di}$ and a distribution on $f_{d\neg i}$ to be able to marginalize (see GP logistic regression)} where $z_i$ is obtained from the previous M-step. We then have the following EP update for each approximate factor $\tilde{g}_{di}(f_{di}) = \mathcal{N}(f_{di}|\tilde{\mu}_{di},\tilde{\sigma}_{di})$:
+\[ \tilde{g}_{di}^{new}(f_{di}) = \frac{\mathcal{N}\left( f_{di}|\left\langle f_{di} \right\rangle_{\tilde{\mathcal{P}}},\left\langle f_{di}^2 \right\rangle_{\tilde{\mathcal{P}}} - \left\langle f_{di} \right\rangle_{\tilde{\mathcal{P}}} \right)}{q_{\neg di}(f_{di})} \]
+where $\tilde{\mathcal{P}}(f_{di}) = g_{di}(f_{di})q_{\neg di}(f_{di})$, with $g_{di}(f_{di}) = \phi(\textrm{f}_{di})^{x_{id}}(1-\phi(\textrm{f}_{di}))^{2-x_{id}}$ being the true binomial factor. On convergence of the EP algorithm, we have approximate posteriors for each latent
+\[ q_d(\mathbf{f}_d) = \frac{1}{Z}\mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \prod_{i=1}^N \tilde{g}_{di}(f_{di}) \]
+which we can then take expectations over for the M-step:
+\begin{align*}
+\mathcal{Z}^* &= \underset{\mathcal{Z}=\{\mathbf{z}_i\}}{\arg\max} \left\langle \log P(\mathcal{X},\{\mathbf{f}_d\}|\mathcal{Z}) \right\rangle_{q(\{\mathbf{f}_d\})} \\
+&= \underset{\mathcal{Z}=\{\mathbf{z}_i\}}{\arg\max} \sum_{d=1}^D \left\langle \log \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \right\rangle_{q_d(\mathbf{f}_d)}
+\end{align*}
+Letting $\mathbf{Z} = \begin{bmatrix} \mathbf{z_1} & \ldots & \mathbf{z}_N \end{bmatrix}$, we can then use the chain rule to perform the maximization by solving:
+\[ \sum_{d=1}^D \frac{\partial}{\partial \mathbf{K}_d} \left\langle \log \mathcal{N}(\mathbf{f}_d|\mathbf{0},\mathbf{K}_d) \right\rangle_{q_d(\mathbf{f}_d)} \frac{\partial \mathbf{K}_d}{\partial\mathbf{Z}} = 0 \]
+As long as our kernels $k_d(\mathbf{z},\mathbf{z}')$ are differentiable, this should be tractable.
+
+%%%%%%%%% MIXTURE MODELS %%%%%%%%%
+\subsection{Mixture Models}
+One limitation of linear Gaussian latent variable models like FA and PPCA is that they can only model the mean and variance of the data. This is often too restrictive, like when the data appears to be multimodal. Mixture models are ideally suited for dealing with such data:
+\begin{align*}
+y &\sim \textrm{Discrete}(\pi) \\
+x|y=k &\sim \mathcal{P}_k(\theta_k)
+\end{align*}
+which gives the marginal distribution over observations:
+\[ x \sim \sum_k \pi_k\mathcal{P}_k(x|\theta_k)\]
+i.e. a convex combination of the mixture component distributions. 
+
+For i.i.d. data $\mathcal{D} = \{x_i\}_{i=1}^N$, this results in a log likelihood that is not easy to optimize:
+\[\ell(\pi,\theta) = \sum_{i=1}^N\log\sum_k \pi_k\mathcal{P}_k(x_i|\theta_k)\]
+since we end up with a sum inside the logarithm. Incorporating Lagrange multipliers where necessary and setting derivatives with respect to the parameters to 0, we get:
+\begin{align*}
+\pi_k^\textrm{ML} &= \frac{1}{N}\sum_{i=1}^N r_{ik} \\
+0 &= \sum_{i=1}^N r_{ik}\frac{\partial \log\mathcal{P}_k(x_i|\theta_k)}{\partial \theta_k^\textrm{ML}}
+\end{align*}
+where
+\[r_{ik} = P(y_i = k|x_i) = \frac{\pi_k\mathcal{P}_k(x_i|\theta_k)}{\sum_{k'} \pi_{k'}\mathcal{P}_{k'}(x_i|\theta_{k'})}\]
+is the posterior probability of the $i$th data point arising from mixture component $k$, termed the \emph{responsibility} of component $k$ for data point $i$. Since these responsibilities themselves depend on the parameters, there is no closed form solution for the maximum likelihood parameter estimates. But we can easily use EM to obtain them, by setting the reponsibilities in the E-step and then solving the above two equations in the M-step.
+
+It is evident that mixture models are invariant to permutations of the mixture components: the likelihood remains unchanged if we switch components $k$ and $k'$.
+
+\subsubsection{Mixture of Gaussians (MoG)}
+The MoG model is:
+\begin{align*}
+y &\sim \textrm{Discrete}(\pi) \\
+\mathbf{x}|y=k &\sim \mathcal{N}(\mu_k,\Sigma_k)
+\end{align*}
+It is useful for:
+\begin{itemize}
+\item Clustering data
+\item Approximating arbitrary probability distributions as a weighted sum of Gaussians
+\end{itemize}
+For i.i.d. data $\mathcal{D} = \{\mathbf{x}^{(i)}\}_{i=1}^N, \mathbf{x}\in\mathbb{R}^D$, our M-step equations become:
+\begin{align*}
+\mu_k^\textrm{ML} &= \frac{\sum_{i=1}^N r_{ik}\mathbf{x}^{(i)}}{\sum_{i=1}^N r_{ik}} \\
+\Sigma_k^\textrm{ML} &= \frac{\sum_{i=1}^N r_{ik}(\mathbf{x}^{(i)}-\mu_k^\textrm{ML})(\mathbf{x}^{(i)}-\mu_k^\textrm{ML})^\textrm{T}}{\sum_{i=1}^N r_{ik}}
+\end{align*}
+
+For clustering data, if we set $\pi_k=\frac{1}{K}$, $\Sigma_k = \sigma^2\mathbf{I}$, $\sigma^2 \rightarrow 0$, the responsibilities become binary (i.e. the posterior distribution over components becomes a $\delta$-function) and the corresponding EM algorithm for obtaining $\mu^\textrm{ML}$ is equivalent to $k$-means clustering, with $k=K$.
+
+\subsubsection{Latent Dirichlet Allocation}
+\todo{blank!}
+
+%%%%%%%%% LATENT CHAIN MODELS %%%%%%%%%
+\subsection{Latent Chain Models}
+All the above latent models that we have considered apply only to i.i.d. data. Data points in a time series, however, are explicitly not independent: each observation depends on everything that has occured in the time series up until that point. Latent chain models capture this property by modelling temporal dependencies and dynamics in the latent space. To make learning tractable, chain models implicitly assume the \emph{Markov property} by constraining probabilistic dependencies to only $n=1$ or $2$ preceding timesteps. In other words, the graph that represents the joint distribution over all latents is a $n$th order \emph{Markov chain}: 
+\[P(y_t|y_{1:t-1})=P(y_t|y_{t-n:t-1})\]
+Independent measurement noise is then modelled by the \emph{emission distribution} over observations, dependent only on the state of the latent variable at the given timepoint of the observation:
+\[P(x_t|x_{1:t-1},x_{t+1:T},y_{1:T}) = P(x_t|y_t)\]
+
+If we assume the latent joint distribution is a first-order Markov chain, the observation-latent joint distribution becomes very simple:
+\[ P(x_{1:T},y_{1:T}) = P(y_1)\prod_{t=2}^T P(y_t|y_{t-1}) \prod_{t=1}^T P(x_t|y_t) \]
+and the the EM algorithm is greatly simplified, with the M-step:
+\begin{align*}
+\theta^{(i)} &= \underset{\theta}{\arg\max} \langle\log P(x_{1:T},y_{1:T}|\theta)\rangle_{P(y_{1:T}|x_{1:T},\theta^{(i-1)})} \\
+&= \underset{\theta}{\arg\max} \langle\log P(y_1|\theta)\rangle_{P(y_1|x_{1:T},\theta^{(i-1)})} + \sum_{t=2}^T \langle\log P(y_t|y_{t-1},\theta)\rangle_{P(y_t,y_{t-1}|x_{1:T},\theta^{(i-1)})} \\
+& \phantom{{}=15} + \sum_{t=1}^T \langle\log P(x_t|y_t,\theta)\rangle_{P(y_t|x_{1:T},\theta^{(i-1)})}
+\end{align*}
+such that we need only compute expectations with respect to the singleton and pairwise marginals $P(y_t|x_{1:T},\theta^{(i-1)})$ and $P(y_t,y_{t-1}|x_{1:T},\theta^{(i-1)})$ in the E-step, rather than having to deal with the much nastier full posterior distribution $P(y_{1:T}|x_{1:T},\theta^{(i-1)})$. Computing these marginals can be far too computationally costly if we do it by brute force by marginalizing the full posterior (e.g. $P(y_t|x_{1:T})$ requires summing full joint posterior over $K^{T-1}$ possible settings for discrete latent space with $K$ possibile states), so we use a recursive message passing algorithm instead:
+\begin{align*}
+P(y_t|x_{1:T}) &\propto M_{(t-1)\rightarrow t}(y_t)M_{t+1\rightarrow t}(y_t) \\
+M_{(t-1)\rightarrow t}(y_t) &= P(x_t|y_t) \int P(y_t|y_{t-1}) M_{(t-2)\rightarrow (t-1)}(y_{t-1}) \textrm{d}y_{t-1} \quad\text{[forward message]} \\
+&\propto P(y_t|x_{1:t}) \quad \text{(Chapman-Kolmogorov Equation)} \\
+M_{(t+1)\rightarrow t}(y_t) &= \int P(x_{t+1}|y_{t+1}) P(y_{t+1}|y_t) M_{(t+2)\rightarrow (t+1)}(y_{t+1}) \textrm{d}y_{t+1} \quad\text{[backward message]} \\
+&\propto P(x_{t+1:T}|y_t)
+\end{align*}
+where the integrals become sums over discrete states if the latent space is discrete. If our model is such that the observation-latent joint distribution is exponential family, then the messages will be exponential family as well and we can easily compute their normalizers.
+
+The two classical latent chain models are the hidden Markov Model (with discrete latents) and the linear Gaussian state-space model (with continuous latents): \todo{table needs to be fixed}
+\begin{table}[H]
+\centering
+\begin{tabular}{p{7cm}|p{7cm}}
+HMM & LGSSM \\\hline
+mixture model + temporal dependencies & FA model + temporal dependencies + $\mathbf{\Psi}$ not necessarily diagonal + usually $K > D$ \\
+weak representation (requires $2^N$ states to encode $N$ bits) & powerful representation (continuous) \\
+arbitrarily rich dynamics & only linear dynamics \\
+invariant to permutations \& relaxation to OOM & invariant to invertible transformations of latents \\
+\end{tabular}
+\end{table}
+The parameters for these two models can be learned via EM or via spectral learning.
+
+\subsubsection{Hidden Markov Model (HMM)}
+In this case, latent variables $s_t$ take on discrete states, and transitions between states are governed by a transition matrix $\mathbf{\Phi}$ where $\phi_{ij} = P(s_t = i|s_{t-1} = j)$:
+\begin{gather*}
+s_1 \sim \textrm{Discrete}(\pi) \\
+s_t|(s_{t-1} = k) \sim \textrm{Discrete}(\Phi_k) \\
+x_t|(s_t = k) \sim \mathcal{P}_k(\theta_k)
+\end{gather*}
+where $\Phi_k$ is the $k$th column of $\mathbf{\Phi}$. The observation-latent joint distribution is then:
+\[ P(x_{1:T},s_{1:T}) = \pi_{s_1}\prod_{t=2}^T \phi_{s_ts_{t-1}} \prod_{t=1}^T \mathcal{P}_{s_t}(x_t|\theta_{s_t}) \]
+
+We can then perform inference using the following recursive message updates:
+\begin{align*}
+P(s_t = k|x_{1:T}) &\propto M_{(t-1)\rightarrow t}(k)M_{(t+1)\rightarrow t}(k) \\
+\text{Forward message:}& \\
+M_{(t-1)\rightarrow t}(k) &= \mathcal{P}_k(x_t|\theta_k)\sum_{k'}\phi_{kk'}M_{(t-2)\rightarrow (t-1)}(k') \\
+&= P(s_t=k,x_{1:T}) = \alpha_t(k) \\
+M_{0\rightarrow 1}(k) &= \pi_k\mathcal{P}_k(x_1|\theta_k) \\
+\text{Backward message:} \\
+M_{(t+1)\rightarrow t}(k) &= \sum_{k'} \mathcal{P}_{k'}(x_{t+1}|\theta_{k'})\phi_{k'k}M_{(t+2)\rightarrow (t+1)}(k') \\
+&= P(x_{t+1:T}|s_t = k) = \beta_t(k) \\
+M_{T\rightarrow (T-1)}(k) &= \sum_{k'} \mathcal{P}_{k'}(x_T|\theta_{k'})\phi_{k'k}
+\end{align*}
+Giving us the following \emph{filtering} and \emph{smoothing} equations:
+\begin{align*}
+P(s_t=k|x_{1:t}) &= \frac{\alpha_t(k)}{\sum_{k'}\alpha_t(k')} \quad\text{(filtering)} \\
+P(s_t=k|x_{1:T}) &= \frac{\alpha_t(k)\beta_t(k)}{\sum_{k'}\alpha_t(k')\beta_t(k')} \quad\text{(smoothing)} \\
+P(s_t=i,s_{t+1}=j|x_{1:T}) &= \frac{\phi_{ji}\mathcal{P}_j(x_{t+1}|\theta_j)\alpha_t(i)\beta_{t+1}(j)}{\sum_k \alpha_T(k)}
+\end{align*}
+This recursive message-passing algorithm for computing the posteriors is called the \emph{forward-backward algorithm}. We can then use EM to learn the ML parameters of the model, using the forward-backward algorithm to compute singleton and pairwise posterior expectations in the E-step and then performing the following M-step updates:
+\begin{align*}
+\pi_k^{(i)} &= P(s_1 = k|x_{1:T},\theta^{(i-1)}) \\
+\phi_{kk'}^{(i)} &= \frac{\sum_{t=1}^{T-1} P(s_t=k',s_{t+1}=k|x_{1:T},\theta^{(i-1)})}{\sum_{t=1}^{T-1} P(s_t=k'|x_{1:T},\theta^{(i-1)})} \\
+\end{align*}
+where $\theta^{(i)} = \{\pi^{(i)},\mathbf{\Phi}^{(i)},\{\theta_k^{(i)}\}\}$. In other words, replace update $\pi_k$ with the proportion of times you expect $s_1$ to be in state $k$ and $\phi_{kk'}$ with the proportion of all $k'$ occurrences that you expect to be followed by a state $k$. Then update your expectations given these updates (E-step) and iterate. While this is simply EM, it is also called the \emph{Baum-Welch Algorithm}. A similar update follows for $\mathcal{P}_k$. If it is Gaussian, then update it with state-posterior weighted mean and covariance, just like the M-step updates for the MoG. If it is discrete, with probability parameter $A_k$, the update looks just like the update for $\Phi$:
+\[ A_{kk'}^{(i)} = \frac{\sum_{t=1}^T \delta(x_t = k')P(s_t = k|x_{1:T},\theta^{(i-1)})}{\sum_{t=1}^T P(s_t = k|x_{1:T},\theta^{(i-1)})} \]
+The M-step equations look just like those for a mixture model, with the singleton and pairwise posteriors as the required responsibilities. \todo{haven't included the slide on rescaling the messages}
+
+In addition to inference, one might also want to compute the most likely sequence of latent states. One option here is to pick the $s_t$ at each time point with highest posterior probability, giving you the \emph{maximum expected number of correct states}. This wouldn't necessarily be the most likely \emph{sequence} of states, however. To find this, we use the \emph{Viterbi decoding algorithm}, which is exactly the same as the forward-backward algorithm, but with maximizations over states as opposed to summations at each point in the recursion. This is equivalent to performing ``zero-temperature'' EM, where instead of using expectations with respect to a posterior in the M-step, we simply use point estimates taken from the posterior mode (i.e. expectations with respect to a $\delta-$function centered at the posterior mode - a probability distribution with zero entropy).
+
+A generalization of the HMM model is called the Observable Operator Model (OOM). The form arises from writing the likelihood of the HMM in a certain way:
+\begin{align*}
+P(x_{1:T}|\pi,\mathbf{\Phi},\{\theta_k\}) &= \sum_k \pi_k\mathcal{P}_k(x_1) \sum_{k'}\phi_{k'k}\mathcal{P}_{k'}(x_2) \sum_{k''}\phi_{k''k'}\mathcal{P}_{k''}(x_3)\ldots \\
+&= \pi^\textrm{T}\mathbf{P}_{x_1}\mathbf{\Phi}^\textrm{T}\mathbf{P}_{x_2}\mathbf{\Phi}^\textrm{T}\mathbf{P}_{x_3}\ldots \mathbf{\Phi}^\textrm{T}\mathbf{P}_{x_T} \mathbf{1} \\
+&= \mathbf{1}^\textrm{T} \mathbf{O}_{x_T}\mathbf{O}_{x_{T-1}}\ldots\mathbf{O}_{x_1}\pi
+\end{align*}
+where $\mathbf{1}$ is a $K\times 1$ vector of ones, $\mathbf{P}_x = \textrm{diag}([\mathcal{P}_1(x) \ldots \mathcal{P}_K(x)])$, and $\mathbf{O}_{x} = \mathbf{\Phi A}_x$ is called a \emph{propagation operator}. OOM's generalize HMMs to any all latent chain distributions parameterized by some $\mathbf{O}_{x}$. This includes HMMs with transition probabilities that can be negative and/or don't sum to one, so it forms a larger class of distributions. Note that they are degenerate wih respect to a similarity transform $\mathbf{O}_{x} \leftarrow \mathbf{GO}_{x}\mathbf{G}^{-1}$. OOMs will come into play in spectral learning algorithm for HMMs, where the learned parameters may belong to the OOM with highest likelihood given the data. It can be very difficult to normalize OOMs or transform back into an HMM.
+
+\subsubsection{Factorial HMM} \label{factorial hmm}
+An alternative to the classical HMM thata greatly improves its representational power is the factorial HMM. Here, the latent state at each timepoint $t$ is represented by a whole set of variables $\{s_t^{(1)},s_t^{(2)},\ldots\}$, i.e. we have a \emph{distributed} representation of the latent state. The resulting graph then looks like an HMM model with several latent chains on top of each other that all have directed edges to the observations, but no edges between each other, giving the log joint
+\[ \log P\left(x_{1:T},\{s_{1:T}^{(m)}\}\right) = \sum_m\left[\log P(s_1^{(m)}) + \sum_{t=2}^T \log P(s_t^{(m)}|s_{t-1}^{(m)})\right] + \sum_{t=1}^T \log P(x_t|\{s_t^{(m)}\}) \]
+
+Naturally, inference in this setting gets much more complicated than in the classical HMM, but we can use factored variational approximations to make it feasible. One approach is to utilize a \emph{structured variational approximation}, factoring the posterior over latents $\mathcal{Y} = \{s_{1:T}^{(1)},s_{1:T}^{(2)},\ldots\}$ into each of the latent chains:
+\[ q(\mathcal{Y}) = \prod_m q_m(s_{1:T}^{(m)}) \]
+yielding the marginals
+\begin{align*}
+q_m(s_{1:T}^{(m)}) &\propto \exp\left[\log P(s_1^{(m)}) + \sum_{t=2}^T \log P(s_t^{(m)}|s_{t-1}^{(m)}) + \sum_{t=1}^T \left\langle \log P(x_t|s_t^{(1)},s_t^{(2)},\ldots)\right\rangle_{\prod_{m' \neq m} q_{m'}} \right] \\
+&\propto \pi^{(m)}_{s_1^{(m)}}\prod_{t=2}^T \phi^{(m)}_{s_t^{(m)}s_{t-1}^{(m)}} \prod_{t=1}^T e^{\left\langle \log P(x_t|s_t^{(1)},s_t^{(2)},\ldots)\right\rangle_{\prod_{m' \neq m} q_{m'}}}
+\end{align*}
+which looks just like the usual HMM observation-latent joint (which is always proportional to the latent posterior) but with the likelihood term modified to incorporate information from the other $m'\neq m$ chains. This allows for \emph{explaining away}, which we would expect from the collider nodes in the DAG structure (section \ref{dags}).
+
+A second approach would be mean-field learning, where we assume the posterior over latents factors over each variable in each chain at each timepoint:
+\[ q(\mathcal{Y}) = \prod_m\prod_{t=1}^T q_m(s_t^{(m)}) \]
+we then get the approximate marginals
+\begin{align*}
+q_{mt}(s_t^{(m)} = i) &\propto \exp\left[\left\langle \log P(s_t^{(m)} = i|s_{t-1}^{(m)})\right\rangle_{q_{m(t-1)}} + \left\langle\log P(s_{t+1}^{(m)}|s_t^{(m)} = i)\right\rangle_{q_{m(t+1)}} \right. \\
+&\phantom{{} = 15} \left. + \left\langle\log P(x_t|s_t^{(1)},s_t^{(2)},\ldots)\right\rangle_{\prod_{m' \neq m} q_{m't}} \right] \\
+&\propto \color{blue}{e^{ \left\langle\log P(x_t|s_t^{(1)},s_t^{(2)},\ldots,s_t^{(m)} = i,\ldots)\right\rangle_{\prod_{m' \neq m} q_{m't}} + \sum_j q_{m(t-1)}\left(s_{t-1}^{(m)} = j\right)\log \phi_{ij}^{(m)}}} \color{red}{e^{\sum_j q_{m(t+1)}\left(s_{t+1}^{(m)} = j\right)\log \phi_{ji}^{(m)}}} \\
+&\propto \color{blue}{M_{(t-1) \rightarrow t}(i)} \color{red}{M_{(t+1) \rightarrow t}(i)}
+\end{align*}
+which yields a message passing solution just like the forward-backward algorithm, with a forward message (in blue) and a backward message (in red). Just like in forward-backward algorithm, the only incoming messages are those from its neighbors in the chain: the ``mean field''. Importantly, as in the structured variational approach, explaining away can occur via interactions between chains in the log likelihood term $\log P(x_t|s_t^{(1)},s_t^{(2)},\ldots)$.
+
+\subsubsection{Linear-Gaussian State-Space Model (LGSSM)}
+The LGSSM model is just like the FA model but with first-order temporal dependencies added in:
+\begin{gather*}
+y_1 \sim \mathcal{N}(\mu_0,\Sigma_0) \\
+y_t|y_{t-1} \sim \mathcal{N}(Ay_{t-1},\Sigma_y) \\
+x_t|y_t \sim \mathcal{N}(By_t,\Sigma_x)
+\end{gather*}
+One crucial difference with FA is that usually the latent dimensionality is greater than the data space dimensionality, since this allows for modelling the underlying dynamics that may exist in a higher dimensional space. Also, the data covariance parameter need not be diagonal.
+
+For inference with the LGSSM, forward and backward recursion yield the Kalman filtering and Kalman smoothing equations:
+\begin{align*}
+\text{Kalman Filtering:}& \\
+P(y_t|x_{1:t}) &= \mathcal{N}(y_t|\hat{\mu}_t^{(t)},\hat{\Sigma}_t^{(t)}) \\
+\hat{\mu}_t^{(t)} &= \hat{\mu}_t^{(t-1)} + K_t(x_t - B\hat{\mu}_t^{(t-1)}) \\
+\hat{\Sigma}_t^{(t)} &= \hat{\Sigma}_t^{(t-1)} - K_tB\hat{\Sigma}_t^{(t-1)}\\
+K_t &= \hat{\Sigma}_t^{(t-1)}B^\textrm{T}(\hat{\Sigma}_x + B\hat{\Sigma}_t^{(t-1)}B^\textrm{T})^{-1} \quad\text{(Kalman gain)} \\
+\hat{\mu}_t^{(t-1)} &= A\hat{\mu}_{t-1}^{(t-1)} \\
+\hat{\Sigma}_t^{(t-1)} &= \hat{\Sigma}_y + A\hat{\Sigma}_{t-1}^{(t-1)}A^\textrm{T} \\
+\hat{\mu}_1^{(0)} &= \hat{\mu}_0 \\
+\hat{\Sigma}_1^{(0)} &= \hat{\Sigma}_0 \\
+\text{Kalman Smoothing:}& \\
+P(y_t|x_{1:T}) &= \mathcal{N}(y_t|\hat{\mu}_t^{(T)},\hat{\Sigma}_t^{(T)}) \\
+\hat{\mu}_t^{(T)} &= \hat{\mu}_t^{(t)} + J_t(\hat{\mu}_{t+1}^{(T)} - A\hat{\mu}_t^{(t)}) \\
+\hat{\Sigma}_t^{(T)} &= \hat{\Sigma}_t^{(t)} + J_t(\hat{\Sigma}_{t+1}^{(T)} - \hat{\Sigma}_{t+1}^{(t)})J_t^\textrm{T} \\
+J_t &= \hat{\Sigma}_t^{(t)}A^\textrm{T}(\hat{\Sigma}_{t+1}^{(t)})^{-1}
+\end{align*}
+and we start the backward recursion with the estimates $\hat{\mu}_T^{(T)},\hat{\Sigma}_T^{(T)}$ obtained from running the Kalman filter up to time $T$.
+
+For ML parameter learning with EM, we use the Kalman smoothing equations (or message passing) to get singleton and pairwise posteriors for the E-step and then perform the following M-step updates:
+\begin{align*}
+A^{new} &= \left(\sum_{t=1}^{T-1} \langle y_{t+1} y_t^\textrm{T} \rangle\right)\left(\sum_{t=1}^{T-1} \langle y_t y_t^\textrm{T} \rangle\right)^{-1} \\
+B^{new} &= \left(\sum_{t=1}^T x_t \langle y_t\rangle^\textrm{T} \right)\left(\sum_{t=1}^T \langle y_t y_t^\textrm{T} \rangle\right)^{-1}
+\end{align*}
+where the expectations are with respect to the singleton and pairwise posteriors computed with the parameters estimated in the previous iteration. Just like FA, these are very similar to the ML solution for linear regression weights (in fact the $B$ update is exactly the same as the loading matrix $A$ update for FA).
+
+\subsubsection{Non-linear state-space model (NLSSM)} \label{nlssm}
+We can generalize the state-space model to non-linear dynamics by modelling Markov temporal dependencies through non-linear functions $f$ and $g$:
+\begin{align*}
+y_t &= f(y_{t-1},u_{t-1}) + w_t \\
+x_t &= g(y_t,u_t) + v_t
+\end{align*}
+where $w_t,v_t$ are temporally independent innovations noise terms and $u_t$ are input variables, which are known. When we assume the noise to be 0-mean Gaussian, we then have:
+\begin{align*}
+y_t|y_{t-1},u_{t-1} &\sim \mathcal{N}\left( f(y_{t-1},u_{t-1}), \Sigma_y \right) \\
+x_t|y_t,u_t &\sim \mathcal{N}\left( g(y_t,u_t), \Sigma_x \right)
+\end{align*}
+Of course, inference in this setting becomes intractable, since we can no longer use our Gaussian marginal and posterior identities when the relationship between variables is non-linear. We must thus resort to approximations.
+
+One such approximation is called the \emph{Extended Kalman Filter/Smoother} (EKF/S). The idea is to simply linearize the system at each timepoint, and then run the Kalman filter/smoother on the resulting non-stationary system:
+\begin{align*}
+ P(y_t|y_{t-1},u_{t-1}) &= \mathcal{N}\left(y_t \Bigr| f(\hat{\mu}_{t-1}^{(t-1)},u_{t-1}) + \frac{\partial f}{\partial y}\Bigr|_{\hat{\mu}_{t-1}^{(t-1)}} (y_{t-1} - \hat{\mu}_{t-1}^{(t-1)}), \Sigma_y \right) \\
+ &= \mathcal{N}\left(y_t \Bigr| \tilde{b}_t + \tilde{A}_ty_{t-1}, \Sigma_y \right) \\
+ P(x_t|y_t,u_t) &= \mathcal{N}\left(x_t \Bigr| g(\hat{\mu}_t^{(t-1)},u_t) + \frac{\partial g}{\partial y}\Bigr|_{\hat{\mu}_t^{(t-1)}} (y_t - \hat{\mu}_t^{(t-1)}), \Sigma_x \right) \\
+ &= \mathcal{N}\left(y_t \Bigr| \tilde{d}_t + \tilde{C}_ty_t, \Sigma_y \right) \\
+ \end{align*} 
+ where $\hat{\mu}_t^{(t')}$ is the mean of the (Gaussian) posterior $P(y_t|x_{1:t'})$, i.e. the estimate of $y_t$ taking into account all observations until time $t'$. We can then obtain the filtering and smoothing posteriors recursively (forward and backward, respectively) by running the Kalman filter 4
+
+Another option is to use an approximate message passing scheme via EP. We can write the posterior distribution over latents as:
+\begin{align*}
+P(y_{1:T}|x_{1:T}) &= \frac{1}{Z} \prod_t P(y_t|y_{t-1})P(x_t|y_t) \\
+&= \frac{1}{Z} \prod_t f_t(y_t,y_{t-1})
+\end{align*}
+We then approximate these factors with $\tilde{f}_t(y_t,y_{t-1})$ via EP. By writing out the cavity distribution, we observe that the resulting factor updates form a recursive message passing algorithm, with the messages approximated by the EP factors:
+\begin{align*}
+q_{\neg t}(y_t,y_{t-1}) &= \int \int \textrm{d}y_{t' < t-1} \textrm{d}y_{t' > t}\, \prod_{t' \neq t} \tilde{f}_{t'}(y_{t'},y_{t'-1}) \\
+&= \int\textrm{d}y_{t' < t-1}\, \prod_{t' \leq t-1} \tilde{f}_{t'}(y_{t'},y_{t'-1}) \int\textrm{d}y_{t' > t}\, \prod_{t' > t} \tilde{f}_{t'}(y_{t'},y_{t'-1}) \\
+&= \alpha_{t-1}(y_{t-1}) \beta_t(y_t)
+\end{align*}
+where
+\[ \alpha_t(y_t) = \int\textrm{d}y_{t-1}\, \tilde{f}_t(y_t,y_{t-1}) \alpha_{t-1}(y_{t-1}) \]
+is a recursive forward message and 
+\[ \beta_t(y_t) = \int\textrm{d}y_{t+1}\, \tilde{f}_{t+1}(y_{t+1},y_t) \beta_{t+1}(y_{t+1}) \]
+is a recursive backward message. We then approximate the factors by computing the approximate marginal distribution $\hat{\mathcal{P}}_\theta(y_t,y_{t-1})$ via KL minimization:
+\[ \hat{\mathcal{P}}_\theta(y_t,y_{t-1}) = \underset{\mathcal{P}_\theta}{\arg\min}\, \textrm{KL}\left[\tilde{\mathcal{P}}(y_t,y_{t-1}) \| \mathcal{P}_\theta(y_t,y_{t-1}) \right] \]
+where 
+\begin{gather*}
+\tilde{P}(y_t,y_{t-1}) = f_t(y_t,y_{t-1})q_{\neg t}(y_t,y_{t-1}) \\
+\mathcal{P}_\theta(y_t,y_{t-1}) = \tilde{f}_t(y_t,y_{t-1})q_{\neg t}(y_t,y_{t-1})
+\end{gather*}
+If our approximate factors $\tilde{f}_t$ are constrained to be Gaussian, then $\mathcal{P}_\theta$ is Gaussian as well (parametrized by natural parameters $\theta$) and the minimum KL is achieved via moment matching (see section \ref{EP}). We can then update our approximate factors and messages via:
+\begin{align*}
+\tilde{f}_t(y_t,y_{t-1}) &= \frac{\hat{\mathcal{P}}_\theta(y_t,y_{t-1})}{\alpha_{t-1}(y_{t-1}) \beta_t(y_t)} \\
+\alpha_t(y_t) &= \frac{1}{\beta_t(y_t)} \int\textrm{d}y_{t-1}\, \hat{\mathcal{P}}_\theta(y_t,y_{t-1})\\
+\beta_t(y_t) &= \frac{1}{\alpha_t(y_t)} \int\textrm{d}y_{t+1}\, \hat{\mathcal{P}}_\theta(y_{t+1},y_t)\\
+\end{align*}
+The EP algorithm proceeds by passing forward and backward messages along the chain multiple times until convergence on some set of approximate factors (and messages). We can then use these factors to compute posteriors.
+
+\subsubsection{Spectral Learning} \label{spectral learning}
+When the likelihood distribution $P(x_i|\theta)$ is exponential family, maximum likelihood learning with i.i.d. data is equivalent to moment matching:
+\[ \langle T(x) \rangle_{P(x|\theta^\textrm{ML})} = \frac{1}{N}\sum_{i=1}^N T(x_i) \]
+i.e. the maximum likelihood parameter is that which matches the expected sufficient statistics to their empirical mean. Spectral learning is based on generalizing this idea to non-exponential family distributions: given some function of the data $T(x)$ and some metric $\mathcal{C}$, optimize your parameters via
+\[ \theta^* = \underset{\theta}{\arg\min} \| \langle T(x) \rangle_{P(x|\theta)} - \frac{1}{N}\sum_{i=1}^N T(x_i) \|_\mathcal{C} \]
+If $T(x)$ and $\mathcal{C}$ are picked well, the resulting learning algorithm may have a global and consistent optimum, thus evading the local maxima problem of EM.
+
+One straight-forward application of this is to latent chain models, with $T(x)$ set to correlations between observations at different time-lags. For LGSSMs, the resulting learning algorithm is called Ho-Kalman SSID. We first define the cross correlation at some time lag $\tau$ as
+\[ M_\tau = \langle x_{t+\tau}x_t^\textrm{T} \rangle = \langle By_{t+\tau}(By_t)^\textrm{T} \rangle  = BA^\tau \langle y_ty_t)^\textrm{T} \rangle B^\textrm{T} \]
+since the Gaussian error $\epsilon_t$ is uncorrelated (so covariance with any other random variable is 0). In the last equality we assumed stationarity of the Markov chain, such that $y_{t+\tau} \approx A^\tau y_t$. Unfortunately, this assumption is required by the Ho-Kalman spectral algorithm. Setting a maximum time lag of $L$, we proceed to construct the $LD\times LM$ \emph{Hankel matrix}
+\[
+H = \langle x_t^+{x_t^-}^\textrm{T} \rangle = 
+\begin{bmatrix} M_1 & M_2 & \ldots & M_L \\ 
+M_2 & \ddots & \ddots & \vdots \\ 
+\vdots & \ddots & \ddots & \vdots \\
+M_L & \ldots & \ldots & M_{2L-1}
+\end{bmatrix} 
+\]
+where we are taking the cross-correlation between the $DL \times 1$ vectors
+\[ x_t^+ = \begin{bmatrix} x_t \\ x_{t+1} \\ \vdots \\ x_{t+L-1} \end{bmatrix} \quad\quad x_t^- = \begin{bmatrix} x_{t-1} \\ x_{t-2} \\ \vdots \\ x_{t-L} \end{bmatrix} \]
+Taking the identity derived above $M_\tau = BC^\tau \langle y_ty_t)^\textrm{T} \rangle B^\textrm{T}$, we note the Hankel matrix factors as
+\[ H = \begin{bmatrix} B \\ BA \\ \vdots \\ BA^{L-1} \end{bmatrix} \begin{bmatrix} A\Pi B^\textrm{T} & A^2\Pi B^\textrm{T} & \ldots & A^L\Pi B^\textrm{T} \end{bmatrix} = \Xi \Upsilon \]
+with $\Pi = \langle y_ty_t^\textrm{T}\rangle$. Under the assumption of stationarity, we can get an empirical estimate of this by
+\[ \hat{H} = \frac{1}{T-2(L+1)} \sum_{t=L+1}^{T-L+1} x_t^+{x_t^-}^\textrm{T} \]
+\todo{not sure why we can't use the whole chain for, say, $M_1$} which we can use to get least-squares estimates of $\Xi$ and $\Upsilon$ via the SVD deomposition of the Hankel matrix:
+\begin{gather*}
+\hat{H} = USV^\textrm{T} \\
+\Xi = US^{\frac{1}{2}} \quad\quad \Upsilon = S^{\frac{1}{2}}V^\textrm{T}
+\end{gather*}
+Then, we can estimate $A,B,\Pi$ via regression between blocks and $\Sigma_y,\Sigma_x$ from the second moments of $x_t$ and $y_t$, by stationarity:
+\begin{gather*}
+\Xi_{1:(L-1)D}A = \Xi_{2:LD} \\
+\underset{t\rightarrow \infty}{\lim} \langle y_ty_t^\textrm{T} \rangle = \Pi = \Sigma_y + A\Pi A^\textrm{T} \\
+\underset{t\rightarrow \infty}{\lim} \langle x_tx_t^\textrm{T} \rangle = \Sigma_x + B\Pi B^\textrm{T}
+\end{gather*}
+with somewhat more complicated but similar regression equations for $B,\Pi$. Moreover, noting from the factorization of $H$ that its rank can't be greater than the latent dimensionality $K$ (the number of row/columns in $\Xi$/$\Upsilon$), we can use the eigenspectrum of the Hankel matrix to estimate $K$.
+
+Spectral methods for learning are great because they are efficient and find the global optimum for the parameters while also providing an estimate of the latent dimensionality. However, they critically require the assumption of stationarity, which is often a bad assumption in the context of latent chain models (particularly short ones). Whenever this assumption holds however, spectral learning recovers the true parameters.
+
+In the case of HMM's, spectral learning is limited by the fact that it only recovers the parameters up to an arbitrary invertible transform of the latents. This implies that the parameters returned by spectral learning are those of an OOM, which is not easy to turn into an HMM if it is not already one. 
+
+%%%%%%%%% MRFs %%%%%%%%%
+\subsection{Markov Random Fields} \label{mrfs}
+A Markov Random Field is an undirected graphical model, where some of the nodes are observed and others are not, called the ``hidden'' or latent variables. 
+
+Any \emph{discrete} MRF with \emph{pairwise} interactions can be parameterized as an exponential family joint distribution as follows:
+\begin{align*}
+P(\mathcal{X}) &= \frac{1}{Z}\prod_{\text{nodes } i} P(X_i) \prod_{\text{edges } (ij)} P(X_i,X_j) \\
+&= \exp\left[ \sum_i \log P(X_i) + \sum_{(ij)} \log P(X_i,X_j) - \log Z \right] \\
+&= \exp\left[ \sum_i\sum_k \theta_i(k)\delta(X_i = k) + \sum_{(ij)}\sum_{k,k'} \theta_{ij}(k,k') \delta(X_i = k)\delta(X_j = k') - \phi(\theta) \right]
+\end{align*}
+where $\theta_i(k) = \log P(X_i = k), \theta_{ij}(k,k') = \log P(X_i = k, X_j = k')$ and $\phi(\theta)$ is the log partition function. For any observed node $X_a$ or pair of observed nodes $X_a,X_{a'}$, $\theta_a(k) = \theta_{aa'}(k,k') = 0$. We thus had an exponential family distribution with natural parameters and sufficient statistics
+\begin{gather*}{}
+\theta = [\theta_i(k), \theta_{ij}(k,k')\; \forall i,j,k,k'] \\
+T(\mathcal{X}) = [\delta(X_i = k), \delta(X_i = k)\delta(X_j = k')\; \forall i,j,k,k']
+\end{gather*}
+and mean parameters (i.e. expected sufficient statistics)
+\[ \mu = [P(X_i = k), P(X_i = k, X_j = k')\; \forall i,j,k,k'] \]
+
+Given the exponential family form, one way to perform inference in an MRF is to solve the dual optimization problem 
+\[ \underset{\mu \in \mathcal{M}}{\arg\max}\; \theta^\textrm{T}\mu - \psi(\mu) \]
+which is equivalent to maximizing the free energy lower bound on the log likelihood (see section \ref{expfam duality} for this derivation). Here, the set of feasible means $\mathcal{M}$ is the set of globally consistent marginal probabilities, i.e. the set of singleton marginals $P(X_i)$ and pairwise marginals $P(X_i,X_j)$ such that
+\[ \sum_{\mathcal{X}\setminus X_i} P(\mathcal{X}) = P(X_i) \]
+Unfortunately, $\mathcal{M}$ and $\psi(\mu)$ are generally hard to work with, so we proceed with the following approximation: 
+\begin{enumerate}
+\item Relax $\mathcal{M}$ to $\mathcal{L}$, the set of \emph{locally} consistent marginals, i.e. the set of singlteon $b_i(X_i)$ and pairwise $b_{ij}(X_i,X_j)$ marginals such that
+\[ \sum_{X_j} b_{ij}(X_i,X_j) = b_i(X_i) \]
+In the terminology of loopy BP, we call these \emph{pseudomarginals}.
+\item Approximate $\psi(\mu)$ with the negative entropy that we would have if the graph structure were a tree:
+\[ \tilde{\psi}(\mu) = -\sum_i \textrm{H}[b_i] + \sum_{(ij)} \textrm{KL}[b_{ij}(X_i,X_j)||b_i(X_i)b_j(X_j)] \]
+\end{enumerate}
+It is not hard to see that $\tilde{\psi}(\mu) = -\mathcal{H}_{Bethe}(\mu)$, such that the resulting approximation is equivalent to replacing a maximization of the true free energy lower bound on the log likelihood with a maximization of the Bethe free energy (section \ref{loopy bp}). This implies that if the graph structure is a tree, our approximation is in fact exact, since (i) the Bethe entropy is the true entropy under a tree structure and (ii) in a tree, local consistency implies global consistency of the marginals, i.e. $\mathcal{L} = \mathcal{M}$. 
+
+Indeed, the above approach to inference is \todo{I think} equivalent to simply running BP on the graph. If the graph is a tree, the resulting marginals are exact. Otherwise, you get the loopy BP approximation with locally but not necessarily globally consistent marginals. However, we've lost the advantage of replacing the primal problem with the dual, since the resulting optimization problem 
+\[ \underset{\mu \in \mathcal{L}}{\arg\max}\; \theta^\textrm{T}\mu + \mathcal{H}_{Bethe}(\mu) \]
+is no longer convex. Even though $\mathcal{L}$ is still a convex set, $\mathcal{H}_{Bethe}(\mu)$ is not convex in $\mu$. \todo{convexifying BP by tightening an upper bound on the log partition function}
+
+\subsubsection{MAP estimation}
+MAP estimation on a discrete pairwise MRF is another computationally difficult optimization problem that we can solve efficientlly via an approximation, called a \emph{linear programming} (LP) relaxation. The optimization problem is as follows:
+\[ \mathcal{X}^\textrm{MAP} = \underset{\mathcal{X} = \{X_i\}}{\arg\max} \sum_i\sum_k \theta_i(k)\delta(X_i = k) + \sum_{(ij)}\sum_{k,k'} \theta_{ij}(k,k') \delta(X_i = k)\delta(X_j = k') \]
+which we can rewrite as optimization under constraints:
+\begin{align*}
+\mathcal{X}^\textrm{MAP} &= \underset{\{b_i,b_{ij}\}}{\arg\max} \sum_i\sum_k \theta_i(k)b_i(k) + \sum_{(ij)}\sum_{k,k'} \theta_{ij}(k,k') b_{ij}(X_i = k,X_j = k') \\
+\text{subject to}& \quad\quad \forall i,j \quad b_i(k),b_{ij}(k) \in \{0,1\} \\
+& \quad\quad \forall i \quad \sum_{k} b_i(k) = 1 \\
+& \quad\quad \forall i,j \quad \sum_{k'} b_{ij}(k,k') = b_i(k) \\
+\end{align*}
+The linear programming relaxation consists of \emph{relaxing} the first constraint to:
+\[ \forall i,j \quad b_i(k),b_{ij}(k) \in [0,1] \]
+This results in a linear program that we can easily solve. Furthermore, whenever the solution takes the form $b_i(k),b_{ij}(k) \in \{0,1\}$ for all $k,i,j$, this is the exact solution to the original problem. It is easy to see that in fact the linear programming relaxation is equivalent to a ``zero-temperature'' version of the Bethe free energy maximization discussed above, relaxing $\mathcal{M} \rightarrow \mathcal{L}$ but now ignoring the Bethe entropy term $\tilde{\psi}(\mu) = \mathcal{H}_{Bethe}(\mu)$ (i.e. setting the entropy - and hence the ``temperature'' - to zero).
+
+When MRF is \emph{binary} and \emph{attractive}, it turns out that an LP relaxation always gives us the exact MAP solution. Furthermore, we can find it via a particularly efficient algorithm called the Max Flow - Min Cut algorithm, analagous to maximizing network flow on a graph. The joint distribution of any binary MRF can be written as follows:
+\[ P(\mathcal{X}) = \frac{1}{Z} \exp\left[\sum_{(ij)} W_{ij}\delta(X_i = X_j) + \sum_i c_iX_i \right] \]
+The MRF is then called \emph{attractive} if all $W_{ij} \geq 0$, such that neighboring nodes ``prefer'' to be in the same state. \todo{max cut-min flow algorithm}
+
+\subsubsection{Boltzmann Machine}
+\subsubsection{Sigmoid Belief Net}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% SUPERVISED LEARNING %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Supervised Learning Models}
+\subsection{Linear Regression}
+The linear regression model is:
+\begin{gather*}
+y|x,\mathbf{w},\sigma^2  \sim \mathcal{N}(f(x),\sigma^2) \\
+f(x) = \sum_{j=0}^{M-1} w_j\phi_j(x) = \mathbf{w}^\textrm{T}\phi(x) \\
+\phi(x) = \begin{bmatrix} \phi_0(\mathbf{x}) & \phi_1(\mathbf{x}) & \ldots & \phi_{M-1}(\mathbf{x}) \\ \end{bmatrix}^\textrm{T}
+\end{gather*}
+where $y$ is the output variable, $x$ is the input variable, and $\{\phi_j(\cdot)\}$ are called the \emph{basis functions} (with $\phi_0(x) = b$ as the bias). While the basis functions can be arbitrary non-linear functions, the model is still called \emph{linear} regression since it is linear in each $\phi_j$. The game in linear regression is to estimate the corresponding linear weights $w_j$ (i.e. the parameter $\mathbf{w}$) given a set of observed input-output pairs $\mathcal{D}=\{(x_i,y_i)\}_{i=1}^N$. 
+\subsubsection{ML Linear Regression}
+The log likelihood is:
+\[ \ell(\mathbf{w},\sigma^2) = \sum_{i=1}^N \log\mathcal{N}(y_i|\mathbf{w}^\textrm{T}\phi(x_i),\sigma^2) \]
+Setting derivatives with respect to each parameter to 0, we get the following ML estimates:
+\begin{align*}
+\mathbf{w}^\textrm{ML} &= (\mathbf{\Phi\Phi}^\textrm{T})^{-1}\mathbf{\Phi y} \\
+\mathbf{\Phi} &= \begin{bmatrix} \phi(x_1) & \phi(x_2) & \ldots & \phi(x_N) \end{bmatrix} \\
+\mathbf{y} &= \begin{bmatrix}y_1 & y_2 & \ldots& y_N\end{bmatrix}^\textrm{T} \\
+{\sigma^2}^\textrm{ML} &= \frac{1}{N}\sum_{i=1}^N(y_i-\mathbf{w}^\textrm{T}\mathbf{\phi}(x_i))^2
+\end{align*}
+
+It turns out that the ML estimate for $\mathbf{w}$ is equivalent to the least-squares estimate that minimizes the squared error: $\mathbf{w}^\textrm{ML} = \arg\max_\mathbf{w} \ell(\mathbf{w},\sigma^2) = \arg\min_\mathbf{w} \sum_i (y_i - \mathbf{w}^\textrm{T}\phi(x_i))^2 = \arg\min_\mathbf{w} \|\mathbf{y} - \mathbf{\Phi}^\textrm{T}\mathbf{w}\|$. Under this formulation, it is clear that the maximum likelihood estimates $\mathbf{w}^\textrm{ML}$ and ${\sigma^2}^\textrm{ML}$ correspond to the projection of $\mathbf{y}$ onto the row space of $\mathbf{\Phi}$ and the distance between this projection and the original vector, respectively. Importantly, we can thus interpret the ML solution for $w_j$ as the scalar projection of $\mathbf{y}$ onto the vector $\phi_j = \begin{bmatrix}\phi_j(x_1) & \phi_j(x_2) & \ldots & \phi_j(x_N)\end{bmatrix}^\textrm{T}$.
+
+\subsubsection{Bayesian Linear Regression}
+It is often useful to impose a Gaussian prior on $\mathbf{w}$:
+\[ \mathbf{w} \sim \mathcal{N}(\mu_w,\Sigma_w) \]
+giving the following posterior distribution:
+\begin{gather*}
+P(\mathbf{w}|\mathcal{D}) = \mathcal{N}\left(\mathbf{w}|\mu_{\mathbf{w}|\mathcal{D}},\Sigma_{\mathbf{w}|\mathcal{D}}\right) \\
+\mu_{\mathbf{w}|\mathcal{D}} = \Sigma_{\mathbf{w}|\mathcal{D}}\left(\Sigma_w^{-1}\mu_w + \frac{1}{\sigma^2}\mathbf{\Phi y} \right) \\
+\Sigma_{\mathbf{w}|\mathcal{D}} = \left(\frac{\mathbf{\Phi\Phi}^\textrm{T}}{\sigma^2}+\Sigma_w^{-1}\right)^{-1}
+\end{gather*}
+Averaging predictions from every possible setting of $\mathbf{w}$ weighted by its posterior probability, we get the following predictive distribution over outputs $y_{new}$ for an arbitrary input $x_{new}$:
+\[ P(y_{new}|\mathbf{x}_{new},\mathcal{D},\sigma,\mathbf{\mu}_w,\mathbf{\Sigma}_w) = \mathcal{N}\left(y\mid \phi(x_{new})^\textrm{T}\mu_{\mathbf{w}|\mathcal{D}},\sigma^2+\phi(x_{new})^\textrm{T}\Sigma_{\mathbf{w}|\mathcal{D}}\phi(x_{new})\right) \]
+
+One commonly used prior is:
+\[ \mathbf{w} \sim \mathcal{N}(\mathbf{0},\alpha^{-1}\mathbf{I}) \]
+which constrains the linear regression weights to be small to avoid overfitting. This is called \emph{ridge regression}, or \emph{weight decay}. The resulting MAP estimate for $\mathbf{w}$ is the mean of the resulting posterior distribution:
+\[ \mathbf{w}^\textrm{MAP} = \left(\mathbf{\Phi\Phi}^\textrm{T}+ \sigma^2\alpha\mathbf{I}\right)^{-1}\mathbf{\Phi y} \]
+which is equivalent to what you would get from minimizing the squared error under the constraint $\mathbf{w}^\textrm{T}\mathbf{w} = 0$ with Lagrange multiplier $\frac{\alpha}{2}$. Since the constraint (the \emph{regularizer}) is quadratic in $\mathbf{w}$: $\mathbf{w}^\textrm{T}\mathbf{w}=\sum_{j=1}^Mw_j^2$, this is called \emph{$L_2$ regularization}. Other types of regularization with regularizers of the form $\sum_{j=1}^Mw_j^q$ lead to different constraints on the linear regression weights which may be useful as well (e.g. the \emph{Lasso regularizer} with $q=1$).
+
+\subsection{Gaussian Process Regression}
+An alternative approach to linear regression is impose a prior distribution on mean functions $f(x)$, completely bypassing the weights $\mathbf{w}$ and basis functions $\phi_j(x)$ by leaving them implicit in the mean function. It is easy to see that this is in fact a simple generalization of Bayesian linear regression, since $f(x) = \mathbf{w}^\textrm{T}\phi(x)$ is just a linear transformation of a Gaussian random variable $\mathbf{w}\sim\mathcal{N}(\mu_w,\Sigma_w)$ and is thus a Gaussian random variable itself. Because it is a function, however, we formalize its probability distribution as a \emph{stochastic process}, defined as a collection of random variables - in this case input-mean output pairs $\{x_1,f(x_1)\},\{x_2,f(x_2)\},\ldots$. Since we've established that $f(x)$ is Gaussian distributed, its distribution is given by a \emph{Gaussian process}:
+\[ f(\cdot) \sim \mathcal{GP}(m(\cdot),k(\cdot,\cdot)) \]
+where $k(x,x')$ is called the \emph{covariance kernel}. \emph{Mercer's theorem} tells us that as long as this kernel is symmetric and positive semi-definite, it will be equivalent to a dot product between basis function vectors in $\mathbb{R}^M$. Thus, the basis functions are implicit in whatever covariance kernel we pick (as long as it is symmetric and positive semi-definite), so we can have up to $M=\infty$ of them if we want. 
+
+Importantly, this doesn't affect the complexity of our predictive distribution, since resulting Gaussian requires working only with covariance matrices of size $N\times N$ (so, even though it scales infinitely well with the number of basis functions $M$, GP regression scales pretty badly with sample size $N$). We can see this by considering the case of ridge regression and deriving the predictive distribution in terms of the corresponding covariance kernel:
+\begin{align*}
+m(x) &= \mathbb{E}[f(x)] = \mathbb{E}[\mathbf{w}]^\textrm{T}\phi(x) = 0 \\
+k(x,x') &= \mathbb{E}[f(x)f(x')] - \mathbb{E}[f(x)]\mathbb{E}[f(x')] \\
+&= \phi(x)^\textrm{T}\mathbb{E}[\mathbf{ww}^\textrm{T}]\phi(x') - 0 \\
+&= \alpha^{-1}\phi(x)^\textrm{T}\phi(x') \\
+\end{align*}
+Given the linear regression model above, this yields the following moments of the marginal distribution over outputs $\mathbf{y} = \begin{bmatrix}y_1 & \ldots& y_N\end{bmatrix}^\textrm{T}$ with corresponding (known) inputs $x_1,\ldots,x_N$:
+\begin{align*}
+\mathbb{E}[y_i] &= \mathbb{E}[f(x_i)] = m(x_i) = 0 \\
+\textrm{Var}[y_i] &= \sigma^2 + \textrm{Var}[f(x_i)] = \sigma^2 + k(x_i,x_i) \\
+\textrm{cov}[y_i,y_j] &= \textrm{cov}[f(x_i),f(x_j)] = k(x_i,x_j) \\
+\Rightarrow \mathbf{y} &\sim \mathcal{N}(\mathbf{0},\tilde{\mathbf{K}}_\mathcal{D}) \\
+\mathbf{K}_\mathcal{D} &= \alpha^{-1}\mathbf{\Phi}^\textrm{T}\mathbf{\Phi} \\
+\tilde{\mathbf{K}}_\mathcal{D} &= \mathbf{K}_\mathcal{D}+\sigma^2\mathbf{I}
+\end{align*}
+where $\mathbf{\Phi} = \begin{bmatrix} \phi(x_1) & \phi(x_2) & \ldots & \phi(x_N) \end{bmatrix}$ as above, and the $N\times N$ \emph{Gram matrix} $\mathbf{K}_\mathcal{D}$ is such that $K_{\mathcal{D},ij} = k(\mathbf{x}_i,\mathbf{x}_j)$ for all input data points $i,j = 1,\ldots,N$. Given some set of new inputs $\left\{x_1', \ldots, x_{N'}'\right\}$ we can now use this marginal distribution to easily obtain a predictive distribution over their corresponding outputs $\mathbf{y}_{new}=\begin{bmatrix} y_1' &\ldots & y_{N'}'\end{bmatrix}^\textrm{T}$ by simply using our identities of partitioned Gaussians:
+\begin{gather*}
+\mathbf{Y} \sim \mathcal{N}(\mathbf{0},\mathbf{K}) \\
+\mathbf{Y}=\begin{bmatrix} y_1 & y_2 & \ldots & y_N & y'_1 & y'_2 & \ldots & y'_{N'}\end{bmatrix}^\textrm{T} \\
+\mathbf{K} = 
+\begin{bmatrix}
+\tilde{\mathbf{K}}_\mathcal{D} & \mathbf{K}' \\
+{\mathbf{K}'}^\textrm{T} & \tilde{\mathbf{K}}_{new}
+\end{bmatrix} \\
+\tilde{\mathbf{K}}_{new}=\alpha^{-1}\mathbf{\Phi}_{new}^\textrm{T}\mathbf{\Phi}_{new}+\sigma^2\mathbf{I} \\
+\mathbf{K}' = \alpha^{-1}\mathbf{\Phi}^\textrm{T}\mathbf{\Phi}_{new} \\
+\mathbf{\Phi}_{new}=\begin{bmatrix} \mathbf{\phi}\left(\mathbf{x}_1'\right) & \mathbf{\phi}\left(\mathbf{x}_2'\right) & \ldots & \mathbf{\phi}\left(\mathbf{x}_{N'}'\right)\end{bmatrix} \\
+\Rightarrow P(\mathbf{y}_{new}|\mathbf{y}) = \mathcal{N}({\mathbf{K}'}^\textrm{T}\tilde{\mathbf{K}}_\mathcal{D}^{-1}\mathbf{y},\tilde{\mathbf{K}}_{new}-{\mathbf{K}'}^\textrm{T}\tilde{\mathbf{K}}_\mathcal{D}^{-1}\mathbf{K}')
+\end{gather*}
+One can easily verify (via some clever applications of the matrix inversion lemma) that the resulting predictive distribution is equivalent to that obtained via traditional ridge regression. The crucial point is that when we perform linear regression in this way (i.e. in terms of the covariance kernel $k(\cdot,\cdot)$), all we need to do is contruct the $N+N' \times N+N'$ Gram matrix $\mathbf{K}:K_{i,j} = k(x_i,x_j)$ to define our final Gaussian predictive distribution.
+
+The general approach in GP regression is to pick a covariance kernel $k(\cdot,\cdot)$ that reflects something about how the inputs and outputs covary, and then let the GP machinery produce the predictive distribution corresponding to the basis functions and Gaussian prior on weights implicit in this kernel via Mercer's theorem. A table of a few commonly used kernels and the properties of the functions favored by the resulting GP prior is outlined below.
+
+One may also want to hand-pick a non-zero mean on the Gaussian process prior on the mean function $f(x)$. A typical application is using a GP prior to model the residuals in some standard regression model with some set of preset basis functions. The case of polynomial regression is illustrated below:
+\begin{align*}
+y &= g(x) \\
+&= \mathbf{\beta}^\textrm{T}\phi(x) + f(x) \\
+&= \beta_0 + \beta_1x + \beta_2x^2 + \ldots + \beta_{M-1} x^{M-1} + f(x) \\
+f(\cdot) &\sim \mathcal{GP}\left(0,k(\cdot,\cdot)\right) \\
+\beta &\sim \mathcal{N}(\mathbf{b},\mathbf{B}) \\
+\Rightarrow g(\cdot) &\sim \mathcal{GP}\left(\mathbf{b}^\textrm{T}\phi(\cdot),k(\cdot,\cdot) + \phi(\cdot)^\textrm{T}\mathbf{B}\phi(\cdot)\right)
+\end{align*}
+
+\subsubsection{Common GP Covariance Kernels}
+\begin{table}[H]
+\centering
+\begin{tabular}{l|l}
+Kernel & Function Properties \\\hline
+$k(x,x') = (1-x^\textrm{T}x')^m$ & $m$th degree polynomial \\
+$k(x,x') = \theta^2 \exp\left[-\frac{\|x - x'\|^2}{2\eta^2}\right]$ & smooth on length scale $\eta$ \\
+$k(x,x') = \theta^2 \exp\left[-\frac{2\sin^2(\pi(x-x')/\tau)}{\eta^2}\right]$ & smooth \& periodic with period $\tau$ \\
+$k(x,x') = \left(1 + \frac{\|x - x'\|^2}{2\alpha\eta^2}\right)^{-\alpha}$ & smooth on multiple scales \\
+\end{tabular}
+\end{table}
+
+\subsubsection{GP Sparse Linear Regression with Inducing Points}
+As briefly mentioned above, GP regression scales really badly with the number of training points $N$. Specifically, computing the parameters of the predictive distribution requires inverting the $N\times N$ matrix $\tilde{\mathbf{K}}_\mathcal{D}$ (see above), which requires $\mathcal{O}(N^3)$ time. The same inversion is also required for computing the marginal likelihood/Bayesian evidence $P(\mathbf{y}|\mathbf{X}) = \mathcal{N}(\mathbf{y}|\mathbf{0},\tilde{\mathbf{K}}_\mathcal{D})$, which we need if we want to perform hyperparameter optimization. So can we find a way to make this matrix smaller?
+
+The ``inducing point'' approach is to try to find a smaller set of $K << N$ fictitious input-output pairs $\{(u_j,\mathbf{z}_j)\}_{j = 1}^K$ (called \emph{inducing points}) that we can use for approximate prediction. In this setting, our marginal likelihood becomes:
+\begin{align*}
+P(\mathbf{y}|\mathbf{X,Z}) &= \int \textrm{d}\mathbf{f} \int \textrm{d}\mathbf{u} \; P(\mathbf{y,u,f}|\mathbf{X,Z}) \\
+&= \int \textrm{d}\mathbf{f} \int \textrm{d}\mathbf{u} \; P(\mathbf{y}|\mathbf{f}) P(\mathbf{f}|\mathbf{u,X,Z}) P(\mathbf{u}|\mathbf{Z})
+\end{align*}
+where we assume the same GP prior we had on $f$ for the input-output mapping of the inducing points $\{(u_j,\mathbf{z}_j)\}$ such that 
+\[ \begin{bmatrix} \mathbf{u} \\ \mathbf{f} \end{bmatrix} \sim \mathcal{N}\left(\mathbf{0},\begin{bmatrix} \mathbf{K}_Z & \mathbf{K}_{Z\mathcal{D}} \\ \mathbf{K}_{\mathcal{D}Z} & \mathbf{K}_\mathcal{D} \end{bmatrix} \right) \]
+where $\mathbf{K}_{Z,ij} = k(\mathbf{z}_i,\mathbf{z}_j)$, $\mathbf{K}_{Z\mathcal{D},ij} = k(\mathbf{z}_i,\mathbf{x}_j)$, and $\mathbf{K}_{\mathcal{D}Z} = \mathbf{K}_{Z\mathcal{D}}^\textrm{T}$, treating the fictitious inputs $\{\mathbf{z}_i\}$ as parameters. We thus have:
+\begin{align*}
+P(\mathbf{y}|\mathbf{f}) &= \mathcal{N}(\mathbf{y}|\mathbf{f},\sigma^2 \mathbf{I}) \\
+P(\mathbf{f}|\mathbf{u,X,Z}) &= \mathcal{N}\left(\mathbf{f}|\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{u}, \mathbf{K}_\mathcal{D} - \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}} \right) \\
+P(\mathbf{u}|\mathbf{Z}) &= \mathcal{N}(\mathbf{u}|\mathbf{0},\mathbf{K}_Z)
+\end{align*}
+
+We proceed by performing EM, iteratively inferring $\mathbf{f}$ and $\mathbf{u}$ and optimizing over $\mathbf{Z}$ to maximize the free energy lower bound
+\begin{align*}
+\mathcal{F}(q(\mathbf{f,u}),\theta) &= \int \textrm{d}\mathbf{f} \int \textrm{d}\mathbf{u}\; q(\mathbf{f,u}) \log \frac{P(\mathbf{y,u,f}|\mathbf{X,Z})}{q(\mathbf{f,u})} \\
+&= \left\langle \log \frac{P(\mathbf{y}|\mathbf{f}) P(\mathbf{f}|\mathbf{u,X,Z}) P(\mathbf{u}|\mathbf{Z})}{q(\mathbf{f,u})} \right\rangle_{q(\mathbf{f,u})}
+\end{align*}
+where $\theta=\{Z,\sigma^2,\eta\}$, with the hyperparameters of the kernel $k$ contained in the set $\eta$. The trick is to use a variational E-step with the following variational form:
+\[ q(\mathbf{f,u}) = P(\mathbf{f}|\mathbf{u,X,Z})q(\mathbf{u}) \]
+Since the posterior $P(\mathbf{f}|\mathbf{u,X,Z})$ is fixed by the model, our inference step is forced to compress all information about the data $\mathbf{y},\mathbf{X}$ into the posterior on $\mathbf{u}$:
+\begin{align*}
+q^*(\mathbf{f,u}) &= \underset{q}{\arg\min}\; \textrm{KL}\left[ q(\mathbf{f,u}) \| P(\mathbf{f,u}|\mathbf{y,X,Z}) \right] \\
+&= \underset{q}{\arg\min} \int \textrm{d}\mathbf{f} \int \textrm{d}\mathbf{u}\; q(\mathbf{f,u}) \log \frac{q(\mathbf{f,u})}{P(\mathbf{f,u}|\mathbf{y,X,Z})} \\
+&= \underset{q}{\arg\min} \int \textrm{d}\mathbf{f} \int \textrm{d}\mathbf{u}\; P(\mathbf{f}|\mathbf{u,X,Z})q(\mathbf{u}) \log \frac{P(\mathbf{f}|\mathbf{u,X,Z})q(\mathbf{u})}{P(\mathbf{f}|\mathbf{u,y,X,Z})P(\mathbf{u}|\mathbf{y,X,Z})} \\
+&= \underset{q}{\arg\min} \int \textrm{d}\mathbf{u}\; q(\mathbf{u}) \log \frac{q(\mathbf{u})}{P(\mathbf{u}|\mathbf{y,X,Z})} + \text{const.} \\
+\Rightarrow q^*(\mathbf{u}) &= \underset{q}{\arg\min}\; \textrm{KL}\left[ q(\mathbf{u}) \| P(\mathbf{u}|\mathbf{y,X,Z}) \right]
+\end{align*}
+
+Using the shorthand $P(\mathbf{f}|\mathbf{u}) = P(\mathbf{f}|\mathbf{u,X,Z})$, our free energy can then be expressed as
+\begin{align*}
+\mathcal{F}(q(\mathbf{f,u}),\theta) &= \left\langle \log \frac{P(\mathbf{y}|\mathbf{f}) P(\mathbf{u}|\mathbf{Z})}{q(\mathbf{u})} \right\rangle_{q(\mathbf{f,u})} \\
+&= \left\langle \langle\log P(\mathbf{y}|\mathbf{f})\rangle_{P(\mathbf{f}|\mathbf{u})} + \log P(\mathbf{u}|\mathbf{Z}) - \log q(\mathbf{u}) \right\rangle_{q(\mathbf{u})}
+\end{align*}
+Expanding the first term, we get (all expectations with respect to $P(\mathbf{f}|\mathbf{u})$):
+\begin{align*}
+\langle\log P(\mathbf{y}|\mathbf{f})\rangle &= -\frac{1}{2}\log|2\pi\sigma^2| - \frac{1}{2\sigma^2}\textrm{Tr}\left[\left\langle(\mathbf{y} - \mathbf{f})(\mathbf{y} - \mathbf{f})^\textrm{T}\right\rangle\right] \\
+&= -\frac{1}{2}\log|2\pi\sigma^2| - \frac{1}{2\sigma^2}\textrm{Tr}\left[\mathbf{yy}^\textrm{T} - \langle \mathbf{f}\rangle \mathbf{y}^\textrm{T} - \mathbf{y}\langle \mathbf{f} \rangle^\textrm{T} + \langle \mathbf{ff}^\textrm{T}\rangle\right] \\
+&= -\frac{1}{2}\log|2\pi\sigma^2| - \frac{1}{2\sigma^2}\textrm{Tr}\left[\mathbf{yy}^\textrm{T} - \langle \mathbf{f}\rangle \mathbf{y}^\textrm{T} - \mathbf{y}\langle \mathbf{f} \rangle^\textrm{T} + \Sigma_{\mathbf{f}|\mathbf{u}} + \langle \mathbf{f} \rangle\langle \mathbf{f} \rangle^\textrm{T}\right] \\
+&= -\frac{1}{2}\log|2\pi\sigma^2| - \frac{1}{2\sigma^2}\textrm{Tr}\left[(\mathbf{y} - \langle\mathbf{f}\rangle)(\mathbf{y} - \langle\mathbf{f}\rangle)^\textrm{T}\right] - \frac{1}{2\sigma^2}\textrm{Tr}\left[\Sigma_{\mathbf{f}|\mathbf{u}}\right] \\
+&= \log\mathcal{N}(\mathbf{y}|\langle\mathbf{f}\rangle, \sigma^2 \mathbf{I}) - \frac{1}{2\sigma^2}\textrm{Tr}\left[\Sigma_{\mathbf{f}|\mathbf{u}}\right]
+\end{align*}
+where $\Sigma_{\mathbf{f}|\mathbf{u}} = \mathbf{K}_\mathcal{D} - \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}}$, giving us
+\[\mathcal{F}(q(\mathbf{u}),\theta) = \left\langle \log \frac{\mathcal{N}(\mathbf{y}|\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{u},\sigma^2 \mathbf{I}) \mathcal{N}(\mathbf{u}|\mathbf{0},\mathbf{K}_Z)}{q(\mathbf{u})} \right\rangle_{q(\mathbf{u})} - \frac{1}{2\sigma^2}\textrm{Tr}\left[\mathbf{K}_\mathcal{D} - \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}}\right] \]
+Recognizing 
+\[ \mathcal{N}(\mathbf{y}|\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{u},\sigma^2 \mathbf{I}) \mathcal{N}(\mathbf{u}|\mathbf{0},\mathbf{K}_Z) = P(\mathbf{y},\mathbf{u}|\sigma^2,\mathbf{K}_Z) \]
+as the observation-latent joint distribution of a PPCA-like model with loading matrix $\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}$ and recalling that after the E-step $q(\mathbf{u}) = P(\mathbf{u}|\mathbf{y,X,Z})$, we have that the fraction inside the logarithm simplifies to the PPCA likelihood
+\begin{align*}
+\frac{\mathcal{N}(\mathbf{y}|\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{u},\sigma^2 \mathbf{I}) \mathcal{N}(\mathbf{u}|\mathbf{0},\mathbf{K}_Z)}{q(\mathbf{u})} &= \frac{P(\mathbf{y},\mathbf{u}|\sigma^2,\mathbf{K}_Z)}{P(\mathbf{u}|\mathbf{y,X,Z})} \\
+&= P(\mathbf{y}|\mathbf{X,Z}) \\
+&= \int \mathcal{N}(\mathbf{y}|\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{u},\sigma^2 \mathbf{I}) \mathcal{N}(\mathbf{u}|\mathbf{0},\mathbf{K}_Z) \textrm{d}\mathbf{u} \\
+&= \mathcal{N}\left(\mathbf{y}| \mathbf{0}, \sigma^2 \mathbf{I} + (\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1})\mathbf{K}_Z(\mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1})^\textrm{T} \right) \\
+&= \mathcal{N}\left(\mathbf{y}| \mathbf{0}, \sigma^2 \mathbf{I} + \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}} \right)
+\end{align*}
+giving us the following simplification of the free energy:
+\[ \mathcal{F}(q^*,\theta) = \log\mathcal{N}\left(\mathbf{y}| \mathbf{0}, \sigma^2 \mathbf{I} + \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}} \right) - \frac{1}{2\sigma^2}\textrm{Tr}\left[\mathbf{K}_\mathcal{D} - \mathbf{K}_{\mathcal{D}Z}\mathbf{K}_Z^{-1}\mathbf{K}_{Z\mathcal{D}}\right] \]
+Our M-step then consists of maximizing this with respect to $\mathbf{Z}$, $\sigma^2$, and any other hyperparameters of the kernel to improve the variational approximation. The result is a marginal likelihood that only requires inverting the $K\times K$ matrix $\mathbf{K}_Z$.
+
+\subsection{GP Logistic Regression}
+Nice EP example
+
+\subsection{Discriminative vs Generative Modelling}
+Suppose we have some labelled data $\{x_{1:T}\}$ with corresponding labels $\{s_{1:T}\}$. The goal of supervised learning is to use these labels to get an estimate $\hat{\theta}$ of the parameters of the conditional label distribution $P(s_{1:T}|x_{1:T},\theta)$ to then be able to label new data. Two possibilities arise in computing $\hat{\theta}$:
+\begin{itemize}
+\item \textbf{Discriminative modelling:}
+\[ \hat{\theta}_{cond} = \underset{\theta}{\arg\max} \langle \log P(s_{1:T}|x_{1:T},\theta) \rangle_{\tilde{P}}\]
+\item \textbf{Generative modelling:}
+\[ \hat{\theta}_{joint} = \underset{\theta}{\arg\max} \langle \log P(s_{1:T},x_{1:T}|\theta) \rangle_{\tilde{P}} \]
+\end{itemize}
+where $\tilde{P}(s_{1:T},x_{1:T})$ is the true distribution of the labelled training data. By construction,
+\[ \langle \log P(s_{1:T}|x_{1:T},\hat{\theta}_{cond}) \rangle_{\tilde{P}} \geq \langle \log P(s_{1:T}|x_{1:T},\hat{\theta}_{joint}) \rangle_{\tilde{P}} \]
+where the equality holds if $\tilde{P}$ is of the same form/model class as $P(s_{1:T},x_{1:T}|\theta)$, such that $P(s_{1:T},x_{1:T}|\hat{\theta}_{joint}) = \tilde{P}(s_{1:T},x_{1:T})$.
+
+While this is usually not the case, discriminative modelling tends to lead to overfitting, and is much more complicated than generative modelling.
+
+\subsection{Conditional Random Field (CRF)}
+\todo{Is this unsupervised or supervised??}CRFs are a multivariate generalization of generalized linear models (GLMs):
+\[ P(s_{1:T}|x_{1:T},\lambda,\kappa) \propto \exp\left[\sum_{t=1}^T \sum_i \lambda_i f_i(s_t,x_t) + \sum_{t=2}^T \sum_j \kappa_j g_j(s_t,s_{t-1},x_t,x_{t-1}) \right] \]
+where $\{s_t\}$ are labels corresponding to observations $\{x_t\}$. ML parameter estimation can be done via gradient ascent:
+\todo{don't understand where the expectations come from}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% MODEL SELECTION %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Model Selection}
+ML and MAP parameter learning concerns inferring the parameters of a given model. But how do we choose the model in the first place? For this, maximum likelihood won't help, since the likelihood will always be higher for a model with more parameters, leading to overfitting. Normatively, we should pick the model $m$ with the highest posterior distribution
+\[ P(m|\mathcal{D}) = \frac{P(\mathcal{D}|m)P(m)}{P(\mathcal{D})} \]
+Typically, we assume a uniform prior over models, such that we perform model selection by comparing the \emph{marginal likelihood} or \emph{Bayesian evidence} 
+\[ P(\mathcal{D}|m) = \int\textrm{d}\theta_m\, P(\mathcal{D}|\theta_m, m)P(\theta_m|m) \] 
+Performing model selection in this way in fact avoids the overfitting problem completely by automatically implementing a form of Occam's razor because the Bayesian evidence is a probability distribution over data sets that has to normalize to one. Thus, while a highly complex and flexible model with lots of parameters will have a non-zero marginal likelihood over many more data sets, the density will be lower for all of them. A simpler model will have zero marginal likelihood for many possible data sets, but a much higher density for those that are non-zero. Thus, model selection via the Bayesian evidence autmoatically leads to selecting the model with just the right level of complexity/flexibility. (see diagram in slides)
+
+For conjugate-exponential family models, the Bayesian evidence is usually tractable, given by the ratio of the posterior and prior volume occupied in this data space:
+\begin{align*}
+P(\mathcal{D}|m) &= \int\textrm{d}\theta_m\, g(\theta_m)^Ne^{\theta_m^\textrm{T}\sum_iT(x_i)}\frac{1}{Z(\tau,\nu)}g(\theta_m)^\nu e^{\theta_m^\textrm{T}\tau} \\
+&= \frac{1}{Z(\nu,\tau)}\int\textrm{d}\theta_m\, g(\theta_m)^{\nu+N} e^{\theta_m^\textrm{T}\left(\tau + \sum_iT(x_i)\right)} \\
+&= \frac{Z\left(\nu+N,\tau+\sum_i T(x_i)\right)}{Z(\nu,\tau)}
+\end{align*}
+Usually, however, computing the Bayesian evidence is intractable, so we need to approximate:
+
+\subsection{Laplace Approximation}
+The Laplace approximation is a second order Taylor expansion of the log joint around the parameter posterior mode $\theta_m^\textrm{MAP}$:
+\begin{align*}
+P(\mathcal{D}|m) &= \int\textrm{d}\theta_m\, P(\mathcal{D},\theta_m| m) \\
+&= \int\textrm{d}\theta_m\, \exp\left[ \log P(\mathcal{D},\theta_m| m)\right] \\
+&\approx \int\textrm{d}\theta_m\, \exp\left[\log P(\mathcal{D},\theta_m^\textrm{MAP}| m) + \left(\frac{\partial}{\partial \theta_m}\Bigr|_{\theta_m^\textrm{MAP}} \log P(\mathcal{D},\theta_m| m)\right)\left(\theta_m - \theta_m^\textrm{MAP}\right)\right. \\
+&\phantom{{}=15} \left. + \frac{1}{2}\left(\theta_m - \theta_m^\textrm{MAP}\right)^\textrm{T}\left(\frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}} \log P(\mathcal{D},\theta_m| m)\right)\left(\theta_m - \theta_m^\textrm{MAP}\right) \right]\\
+&\approx \int\textrm{d}\theta_m\, \exp\left[\log P(\mathcal{D},\theta_m^\textrm{MAP}| m) - \frac{1}{2}\left(\theta_m - \theta_m^\textrm{MAP}\right)^\textrm{T}A^{-1}\left(\theta_m - \theta_m^\textrm{MAP}\right) \right] \\
+&\approx P(\mathcal{D},\theta_m^\textrm{MAP}| m) \int\textrm{d}\theta_m\, \exp\left[- \frac{1}{2}\left(\theta_m - \theta_m^\textrm{MAP}\right)^\textrm{T}A\left(\theta_m - \theta_m^\textrm{MAP}\right) \right] \\
+&\approx P(\mathcal{D},\theta_m^\textrm{MAP}| m) |2\pi A^{-1}|^\frac{1}{2} \\
+&\approx P(\mathcal{D}|\theta_m^\textrm{MAP}, m)P(\theta_m^\textrm{MAP}| m) (2\pi)^\frac{M}{2} |A|^{-\frac{1}{2}} \\
+\end{align*}
+where
+\[ A = -\frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}}\log P(\mathcal{D},\theta_m| m) \]
+is the negative Hessian of the log joint evaluated at $\theta_m^\textrm{MAP}$ and $M$ is the number of parameters. This arises from going from the 5th to the 6th line above, where we note that the expression inside the integral is an unnormalized Gaussian distribution over $\theta_m$, with mean and covariance $\theta_m^\textrm{MAP}$ and $A^{-1}$, respectively. Thus, the Laplace approximation is equivalent to approximating the posterior distribution over parameters with a Gaussian: an approximation that, by CLT, is correct in the limit of infinite data.
+
+\subsection{Bayesian Information Criterion (BIC)}
+The BIC is an easy number to compute to give a rough criterion by which to compare models. It is derived from the Laplace approximation in the limit of infinite data. We first note the dependence of $A$ on $N$ by writing down the negative Hessian of the log joint for i.i.d. data $\mathcal{D} = \{x_i\}_{i=1}^N$:
+\begin{align*}
+A &= - \left( \frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}}\log P(\mathcal{D}|\theta_m,m) + \frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}}\log P(\theta_m,m) \right) \\
+&= -\left( \sum_{i=1}^N \frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}}\log P(x_i|\theta_m, m) + \frac{\partial^2}{\partial \theta_m^2}\Bigr|_{\theta_m^\textrm{MAP}}\log P(\theta_m| m) \right) \\
+&= NA_0 + A_1
+\end{align*}
+As $N \rightarrow \infty$, then, the Laplace approximation of the log evidence becomes:
+\begin{align*}
+\underset{N\rightarrow \infty}{\lim} \log P(\mathcal{D}|m) &\approx \underset{N\rightarrow \infty}{\lim} \log P(\mathcal{D}|\theta_m^\textrm{MAP}, m) + \log P(\theta_m^\textrm{MAP}| m) + \frac{D}{2}\log(2\pi) - \frac{1}{2} \log |A| \\
+&\approx \underset{N\rightarrow \infty}{\lim} \sum_{i=1}^N \log P(x_i|\theta_m^\textrm{MAP}, m) + \log P(\theta_m^\textrm{MAP}| m) + \frac{D}{2}\log(2\pi) - \frac{1}{2} \log |NA_0 + A_1| \\
+&\approx \sum_{i=1}^N \log P(x_i|\theta_m^\textrm{MAP}, m) - \frac{1}{2} \log N^M \\
+&\approx \log P(\mathcal{D}|\theta_m^\textrm{MAP}, m) - \frac{M}{2} \log N \\
+\end{align*}
+where $M$ is equal to the number of parameters such that the second term is a penalty on the number of parameters. 
+
+While the BIC is an approximation of an approximation in a usually unrealistic limit, it is very easy to compute, sinc we will already have the log likelihood and $\theta_m^\textrm{MAP}$ from parameter learning. Furthermore, in the limit of infinite data, $\theta^\textrm{ML} = \theta^\textrm{MAP}$, so it is theoretically ok to use the ML estimate rather than the MAP estimate in the evaluation of the likelihood term, making the BIC a straight-forward number to compute after ML parameter estimation for model selection.
+
+\subsection{Hyperparameter Optimization}
+Sometimes, we will have fixed parametric model in mind, with a prior over the parameters parametrized by a set of \emph{hyperparameters}. In this case, we want to select the model with the setting of the hyperparameters $\eta$ that maximizes the Bayesian evidence:
+\[ P(\mathcal{D}|\eta) = \left[\int\textrm{d}\theta_m\, P(\mathcal{D}|\theta_m)P(\theta_m|\eta)\right]\color{blue}{\left[\frac{P(\eta)}{P(\mathcal{D})}\right]} \]
+where we only need to take into account the term in blue if we assume a non-uniform hyperprior $P(\eta)$ on the hyperparameters. Learning the model by optimizing the hyperparameters is called \emph{maximum marginal likelihood} or \emph{Type 2 Maximum Likelihood (ML-2)} learning.
+
+For Bayesian linear regression with a 0-mean Gaussian prior on the weights $\mathcal{N}(\mathbf{0},\Sigma_w)$, for example, the Baysian evidence $\mathcal{E}(\Sigma_w,\sigma^2)$ is as follows:
+\begin{align*}
+\mathcal{E}(\Sigma_w,\sigma^2) &= \int \textrm{d}\mathbf{w} \mathcal{N}(\mathbf{y}|\mathbf{\Phi}^\textrm{T}\mathbf{w},\sigma^2) \mathcal{N}(\mathbf{w}|\mathbf{0},\Sigma_w) \\
+&= \mathcal{N}(\mathbf{y}|\mathbf{0},(\sigma^2 \mathbf{I} + \mathbf{\Phi}^\textrm{T}\Sigma_w \mathbf{\Phi})) \\
+&= \sqrt{\frac{|2\pi\Sigma_{w|\mathcal{D}}|}{|2\pi \sigma^2 \mathbf{I}||2\pi\Sigma_w|}}\exp\left[-\frac{1}{2} \mathbf{y}^\textrm{T}\left( \frac{1}{\sigma^2} - \frac{\mathbf{\Phi}^\textrm{T}\Sigma_{w|\mathcal{D}}\mathbf{\Phi}}{\sigma^4} \right)\mathbf{y}\right]
+\end{align*}
+where $\Sigma_{w|\mathcal{D}} = \left(\Sigma_w^{-1} + \frac{\mathbf{\Phi\Phi}^\textrm{T}}{\sigma^2} \right)^{-1}$ is the covariance of the posterior on $\mathbf{w}$.
+
+\subsubsection{Automatic Relevance Detection (ARD)} \label{ard}
+We can exploit hyperparameter optimization to learn the dimensionality of a latent or parameter space. This is called \emph{automatic relevance detection}.
+
+In linear regression, we can use this to learn the number of basis functions we actually need to model the data. Given some set of $M$ basis functions, we impose the ridge regression prior on weights:
+\[ w_k \sim \mathcal{N}(0,\alpha_k^{-1}\mathbf{I} ) \]
+and then perform Bayesian evidence optimization to learn the $\alpha_{k}$'s, $k=1,\ldots,M$. Computing the derivatives of the above Bayesian evidence with respect to $\alpha_k$ and $\sigma^2$ and equating to 0, we get:
+\begin{align*}
+\alpha_k^{new} &= \frac{1 - \alpha_k\left[\Sigma_{w|\mathcal{D}}\right]_{kk}}{{\mathbf{\mu}_{w|\mathcal{D}}}_k^2} \\
+{\sigma^2}^{new} &= \frac{(\mathbf{y}^\textrm{T} - \mathbf{\mu}_{w|\mathcal{D}}^\textrm{T} \mathbf{\Phi}) (\mathbf{y}^\textrm{T} - \mathbf{\mu}_{w|\mathcal{D}}^\textrm{T} \mathbf{\Phi})^\textrm{T}}{N - \sum_k \left(1 - \alpha_k\left[\Sigma_{w|\mathcal{D}}\right]_{kk} \right)}
+\end{align*}
+\todo{no idea how these solutions arise...}where $\mathbf{\mu}_{w|\mathcal{D}} = \Sigma_{w|\mathcal{D}}\frac{\mathbf{\Phi y}}{\sigma^2}$ is the mean of the posterior on $\mathbf{w}$. During optimization, some of the $\alpha_k$'s diverge to infinity, indicating irrelevant inputs/basis functions. Running this algorithm yields a sparse solution to regression that avoids the overfitting pitfalls of ML regression.
+
+We can also use ARD to learn the latent dimensionality in a linear Gaussian latent variable model like Factor Analysis. Analagously to the linear regression case, we impose the following prior on the loading matrix:
+\[ A_k \sim \mathcal{N}(\mathbf{0}, \alpha_k^{-1} \mathbf{I}) \]
+where $A_k$ is the $k$th column of the loading matrix. We proceed by writing the model as $K=D$, and then run variational Bayes with an additional hyper-M step to optimize the $\alpha_k$'s' at each iteration:
+\begin{align*}
+\alpha_k^{new} &= \underset{\alpha_k}{\arg\max}\, \int\int \textrm{d}\mathcal{Y} \textrm{d}\mathbf{A} \, Q_y(\mathcal{Y})Q_A(\mathbf{A}) \left( \log P(\mathcal{X}|\mathcal{Y},\mathbf{A}) + \log P(\mathcal{Y}) + \sum_{k'=1}^D \log P(A_{k'}|\alpha_{k'}) \right) \\
+&= \underset{\alpha_k}{\arg\max}\, \left\langle \log P(A_k|\alpha_k) \right\rangle_{Q_A} \\
+&= \underset{\alpha_k}{\arg\max}\, \left\langle \log \mathcal{N}(A_k|\mathbf{0},\alpha_k \mathbf{I}) \right\rangle_{Q_A}
+\end{align*}
+As before, the differe $\alpha_k$'s will diverge, with some going to infinity and thus indicating irrelevant dimensions. So we can estimate the latent space dimensionality by counting the number of $\alpha_k$'s that remain finite.
+
+\subsection{Variational Bayes (VB)}
+For a latent variable model, rather than directly trying to compute the Bayesian evidence, an alternative more tractable approach is to compute a free energy lower bound on it. Then, we might proceed by picking the model with the highest such lower bound on the evidence. We can compute the true free energy in the usual way, but now treating the parameters as an additional latent variable:
+\[ \log P(\mathcal{D}|m) = \log \int\int \textrm{d}\mathcal{Y} \textrm{d}\theta_m \, Q(\mathcal{Y},\theta_m) \frac{P(\mathcal{X},\mathcal{Y},\theta_m|m)}{Q(\mathcal{Y},\theta_m)} \overset{\text{Jensen}}{\geq} \int\int \textrm{d}\mathcal{Y} \textrm{d}\theta_m \, Q(\mathcal{Y},\theta_m) \log \frac{P(\mathcal{X},\mathcal{Y},\theta_m|m)}{Q(\mathcal{Y},\theta_m)} \]
+With this formulation, we can now hope to compute the Bayesian evidence via an EM-like algorithm to saturate this free energy lower bound. As we know from our E-step equations, however, the optimal value of $Q$ is the true posterior over latents and parameters $Q(\mathcal{Y},\theta_m) = P(\mathcal{Y},\theta_m | \mathcal{X})$, which is rarely accessible or tractable. So, we take a factored variational approach to approximating it by assuming that $Q$ factorizes over the latents and parameters $Q(\mathcal{Y},\theta_m) = Q_y(\mathcal{Y})Q_\theta(\theta_m)$, giving us the following lower bound on the true free energy lower bound:
+\[ \log P(\mathcal{D}|m) \geq \int\int \textrm{d}\mathcal{Y} \textrm{d}\theta_m \, Q_y(\mathcal{Y})Q_\theta(\theta_m) \log \frac{P(\mathcal{X},\mathcal{Y},\theta_m|m)}{Q_y(\mathcal{Y})Q_\theta(\theta_m)} = \mathcal{F}(Q_y,Q_\theta) \]
+Maximizing the approximate free energy lower bound $\mathcal{F}(Q_y,Q_\theta)$ (which is really a lower bound on a lower bound) to approximate the Bayesian evidence is called variational Bayes. Indeed, we can find the latents and variables that maximize it by using a variational EM-like algorithm:
+\begin{itemize}
+\item \textbf{VB-E step}:
+\[ Q_y^{(i)}(\mathcal{Y}) \propto \exp\left[\left\langle \log P(\mathcal{X},\mathcal{Y}|\theta_m)\right\rangle_{Q_\theta^{(i-1)}} \right] \]
+\item \textbf{VB-M step}:
+\[ Q_\theta^{(i)}(\theta_m) \propto P(\theta_m|m)\exp\left[\left\langle \log P(\mathcal{X},\mathcal{Y}|\theta_m)\right\rangle_{Q_y^{(i)}} \right] \]
+\end{itemize}
+where $i$ indexes the current iteration. This iterative algorithm will eventually converge to an approximate lower bound on the Bayesian evidence and approximate posteriors over latents $Q_y$ and parameters $Q_\theta$. Thus, we can use the variational Bayes algorithm for model selection, inference, and parameter estimation! Indeed, in the EM-like formulation above, we can see that the original EM algorithm is just zero-temperature variational Bayes, where the approximate posterior over parameters is a $\delta-$function centered at $\theta_m^* = \underset{\theta}{\arg\max} P(\theta|m)\exp\left[\log \left\langle P(\mathcal{X},\mathcal{Y}|\theta)\right\rangle_{Q_y^{(i)}}\right]$ (i.e. the E-step posterior is parametrized by a point estimate of $\theta$ rather than an expectation).
+
+When the model joint is conjugate-exponential family with i.i.d. observations $\mathcal{X} = \{x_i\}_{i=1}^N$:
+\begin{align*}
+P(\mathcal{X},\mathcal{Y}|\theta_m) &= g(\theta_m)^N \left[\prod_{i=1}^N f(x_i,y_i)\right]e^{\sum_{i=1}^N \phi(\theta_m)^\textrm{T}T(x_i,y_i)} \\
+P(\theta_m|\tau,\nu) &= F(\tau,\nu) g(\theta_m)^\nu e^{\phi(\theta_m)^\textrm{T}\tau}
+\end{align*} 
+the VB-E and VB-M steps simplify to
+\begin{align*}
+Q_y^{(i)}(\mathcal{Y}) &\propto \exp\left[ N\log g(\theta_m) + \sum_{n=1}^N \log f(x_n,y_n) + \left\langle\phi(\theta_m)\right\rangle_{Q_\theta^{(i-1)}}^\textrm{T}T(x_n,y_n) \right] \\
+&\propto \prod_{n=1}^N f(x_n,y_n) \exp\left[\left\langle\phi(\theta_m)\right\rangle_{Q_\theta^{(i-1)}}^\textrm{T} T(x_n,y_n) \right] \\
+&= \prod_{n=1}^N P\left(y_n|x_n,\left\langle\phi(\theta_m)\right\rangle_{Q_\theta^{(i-1)}}\right) \\
+Q_\theta^{(i)}(\theta_m) &\propto \exp\left[ \log F(\tau,\nu) + \nu\log g(\theta_m) + \phi(\theta_m)^\textrm{T}\tau + N\log g(\theta_m) + \sum_{n=1}^N \left\langle\log f(x_n,y_n)\right\rangle_{Q_y^{(i)}} + \phi(\theta_m)^\textrm{T}\left\langle T(x_n,y_n)\right\rangle_{Q_y^{(i)}} \right] \\
+&\propto \exp\left[ (\nu+N)\log g(\theta_m) + \phi(\theta_m)^\textrm{T}\left(\tau + \sum_{n=1}^N \left\langle T(x_n,y_n)\right\rangle_{Q_y^{(i)}} \right) \right] \\
+&= P(\theta_m|\tilde{\tau}^{(i)},\tilde{\nu}) \\
+\tilde{\nu} &= \nu + N \\
+\tilde{\tau}^{(i)} &= \tau + \sum_{n=1}^N \left\langle T(x_n,y_n)\right\rangle_{Q_y^{(i)}}
+\end{align*}
+Thus, all we need to keep track of across iterations is $\tilde{\tau}^{(i)}$, since $\tilde{\nu}$ is fixed given a data set and the expected sufficient statistics $\left\langle T(x_i,y_i)\right\rangle_{P(y_i|x_i,\langle\theta_m\rangle_{P(\theta_m|\tilde{\tau},\tilde{\nu})})}$ depend on $\tilde{\tau}$. The EM-like algorithm will eventually converge to $\tilde{\tau}^*$ yielding the approximate latent and parameter posteriors
+\begin{gather*}
+Q^*_y(\mathcal{Y}) = \prod_{i=1}^N q^*_i(y_i) \\
+q^*_i(y_i) = P(y_i|x_i,\langle\theta_m\rangle_{Q^*_\theta}) \\
+Q^*_\theta(\theta_m) = P(\theta_m|\tilde{\tau}^*,\tilde{\nu})
+\end{gather*}
+and the free energy lower bound on the Bayesian evidence $\mathcal{F}(Q^*_y,Q^*_\theta)$.
+
+We can also use VB for hyperparameter optimization by introducing a \emph{hyper-M step} (after the M-step) to maximize the free energy lower bound with respect to the hyperparameter:
+\begin{align*}
+\eta^{(i)} &= \underset{\eta}{\arg\max}\, \mathcal{F}(Q_y,Q_\theta,\eta) \\
+&= \underset{\eta}{\arg\max}\, \int\int \textrm{d}\mathcal{Y} \textrm{d}\theta_m \, Q_y(\mathcal{Y})Q_\theta(\theta_m) \log P(\mathcal{X},\mathcal{Y},\theta_m|\eta)
+\end{align*}
+We can exploit this to perform automatic relevance detection (section \ref{ard}.
+
+\subsection{Annealed Importance Sampling}
+We can also use importance sampling to approximate the Bayesian evidence.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% EM %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Expectation Maximization} \label{expectation maximization}
+It is often the case with latent variable models that there is no closed form optimum of the log likelihood because we don't know the latents. The latent-observation joint distribution $P(\mathcal{Y,X}|\theta)$, however, usually has a form that is easy to work with (e.g. ExpFam) and easy to optimize when the latents $\mathcal{Y}$ are fixed. The EM algorithm exploits this by iteratively setting the latents to their posterior expectations under the current setting of parameters (E-step) and then setting the parameters by optimizing the joint distribution with the fixed latents (M-step).
+
+In the exact case, this results in the saturation of a free energy lower bound on the log likelihood $\mathcal{F}(q,\theta)$:
+\begin{align*}
+\ell(\theta) &= \log \int P(\mathcal{X},\mathcal{Y}|\theta) \textrm{d}\mathcal{Y} \\
+&= \log \int q(\mathcal{Y}) \frac{P(\mathcal{X},\mathcal{Y}|\theta)}{q(\mathcal{Y})} \textrm{d}\mathcal{Y} \\
+&\overset{\text{Jensen}}{\geq} \int q(\mathcal{Y}) \log\frac{P(\mathcal{X},\mathcal{Y}|\theta)}{q(\mathcal{Y})} \textrm{d}\mathcal{Y} = \mathcal{F}(q,\theta)
+\end{align*}
+where $q(\mathcal{Y})$ is an arbitrary probability distribution on latents, giving us the inequality via \emph{Jensen's rule}: for any concave function $f$,
+\[ f(\mathbb{E}[x]) \geq \mathbb{E}[f(x)] \]
+
+The EM algorithm then proceeds by iteratively maximizing the free energy lower bound with respect to $q$ and $\theta)$ at each iteration $i$:
+\begin{itemize}
+\item \textbf{E-step}:
+\begin{align*}
+q^{(i)}(\mathcal{Y}) &= \underset{q}{\arg\max} \;\mathcal{F}(q,\theta^{(i-1)}) \\
+&= \underset{q}{\arg\max} \; \int q(\mathcal{Y}) \log\frac{P(\mathcal{X},\mathcal{Y}|\theta^{(i-1)})}{q(\mathcal{Y})} \textrm{d}\mathcal{Y} \\ 
+&= \underset{q}{\arg\max} \; \int q(\mathcal{Y}) \log\frac{P(\mathcal{X}|\theta^{(i-1)})P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)})}{q(\mathcal{Y})} \textrm{d}\mathcal{Y} \\ 
+&= \underset{q}{\arg\max} \; \int q(\mathcal{Y})\log P(\mathcal{X}|\theta^{(i-1)})\textrm{d}\mathcal{Y} + \int q(\mathcal{Y}) \log\frac{P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)})}{q(\mathcal{Y})} \textrm{d}\mathcal{Y} \\ 
+&= \underset{q}{\arg\max} \; \log P(\mathcal{X}|\theta^{(i-1)}) - \int q(\mathcal{Y}) \log\frac{q(\mathcal{Y})}{P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)})} \textrm{d}\mathcal{Y} \\ 
+&= \underset{q}{\arg\max} \; \ell(\theta^{(i-1)}) - \textrm{KL}\left[q(\mathcal{Y})\|P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)}) \right] \\
+&= \underset{q}{\arg\min} \; \textrm{KL}\left[q(\mathcal{Y})\|P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)}) \right] \\ 
+&= P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)})
+\end{align*}
+since $\textrm{KL}[p\|q] \geq 0]$ for any pair of probability distributions $p,q$, where the equality (i.e. the minimum) holds only when $p=q$. Thus, at the end of the E-step, $\mathcal{F}(q,\theta^{(i-1)}) = \ell(\theta^{(i-1)})$.
+\item \textbf{M-step}:
+\begin{align*}
+\theta^{(i)} &= \underset{\theta}{\arg\max} \;\mathcal{F}(q^{(i)},\theta) \\
+&= \underset{\theta}{\arg\max} \; \int q^{(i)}(\mathcal{Y}) \log\frac{P(\mathcal{X},\mathcal{Y}|\theta)}{q^{(i)}(\mathcal{Y})} \textrm{d}\mathcal{Y} \\ 
+&= \underset{\theta}{\arg\max} \; \int q^{(i)}(\mathcal{Y}) \log P(\mathcal{X},\mathcal{Y}|\theta) \textrm{d}\mathcal{Y} - \int q^{(i)}(\mathcal{Y}) \log q^{(i)}(\mathcal{Y}) \textrm{d}\mathcal{Y} \\ 
+&= \underset{\theta}{\arg\max} \; \left\langle\log P(\mathcal{X},\mathcal{Y}|\theta)\right\rangle_{q^{(i)}} - \textrm{H}[q^{(i)}] \\
+&= \underset{\theta}{\arg\max} \; \left\langle\log P(\mathcal{X},\mathcal{Y}|\theta)\right\rangle_{q^{(i)}}
+\end{align*}
+\end{itemize}
+The free energy thus increases at each iteration, until it converges to a (possibly local) maximum, upper bounded by the true log likelihood:
+\[\ell(\theta^{(i-1)}) \overset{\textrm{E-step}}{=} \mathcal{F}(q^{(i)},\theta^{(i-1)}) \overset{\textrm{M-step}}{\leq} \mathcal{F}(q^{(i)},\theta^{(i)}) \overset{\textrm{Jensen}}{\leq} \ell(\theta^{(i)})\]
+
+Importantly, we can theoretically prove that if EM converges to some $\theta^*$, this fixed point must be a maximum of the log likelihood. If it has converged, then necessarily
+\begin{align*}
+\frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\langle\log P(\mathcal{X},\mathcal{Y}|\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} &= 0 \\
+\frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} &= \frac{\partial}{\partial \theta}\Bigr|_{\theta^*} \int P(\mathcal{Y}|\mathcal{X},\theta^*)\log P(\mathcal{Y}|\mathcal{X},\theta) \\
+&= \frac{\partial}{\partial \theta}\Bigr|_{\theta^*} \left[ \int P(\mathcal{Y}|\mathcal{X},\theta^*)\log P(\mathcal{Y}|\mathcal{X},\theta) - \int P(\mathcal{Y}|\mathcal{X},\theta^*)\log P(\mathcal{Y}|\mathcal{X},\theta^*) \right] \\
+&= \frac{\partial}{\partial \theta}\Bigr|_{\theta^*} -\textrm{KL}[P(\mathcal{Y}|\mathcal{X},\theta^*)\|P(\mathcal{Y}|\mathcal{X},\theta)] \\
+&= 0
+\end{align*}
+Then,
+\begin{align*}
+\frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\log P(\mathcal{X}|\theta) &= \frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\langle\log P(\mathcal{X}|\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} \\
+&= \frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\langle\log P(\mathcal{X,Y}|\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} - \frac{\partial}{\partial \theta}\Bigr|_{\theta^*}\langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} \\
+&= 0
+\end{align*}
+Thus, a fixed point of EM is a fixed point of the log likelihood. We can then take the second derivative to confirm that this fixed point is indeed a \emph{maximum} of the log likelihood:
+\[ \frac{\partial^2}{\partial \theta^2}\Bigr|_{\theta^*}\log P(\mathcal{X}|\theta) = \frac{\partial^2}{\partial \theta^2}\Bigr|_{\theta^*}\langle\log P(\mathcal{X,Y}|\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} - \frac{\partial^2}{\partial \theta^2}\Bigr|_{\theta^*}\langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} \]
+By construction of the M-step, we know that $\theta^*$ is a maximum of $\langle\log P(\mathcal{X,Y}|\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)}$, so the first term is negative. By construction of the E-step, we know that at a fixed point the KL divergence $\textrm{KL}\left[P(\mathcal{Y}|\mathcal{X},\theta^*) \| P(\mathcal{Y}|\mathcal{X},\theta)\right] = \int \textrm{d}\mathcal{Y}\, P(\mathcal{Y}|\mathcal{X},\theta^*)\frac{P(\mathcal{Y}|\mathcal{X},\theta)}{P(\mathcal{Y}|\mathcal{X},\theta^*)} = \textrm{H}[P(\mathcal{Y}|\mathcal{X},\theta^*)] - \langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)}$ will be at a minimum. Since $\frac{\partial^2}{\partial \theta^2} \langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} = \frac{\partial^2}{\partial \theta^2} \langle\log P(\mathcal{Y}|\mathcal{X},\theta)\rangle_{P(\mathcal{Y}|\mathcal{X},\theta^*)} + \frac{\partial^2}{\partial \theta^2} \textrm{H}[P(\mathcal{Y}|\mathcal{X},\theta^*)] = \frac{\partial^2}{\partial \theta^2}-\textrm{KL}\left[P(\mathcal{Y}|\mathcal{X},\theta^*) \| P(\mathcal{Y}|\mathcal{X},\theta)\right]$ the second term is a second derivative of a maximum (!!) and is thus negative, BUT IT SHOULD BE POSITIVE!!! \todo{da fuckkk}.
+
+In particular, for an exponential-family joint distribution, our M-step is:
+\begin{align*}
+\theta^{(i)} &= \underset{\theta}{\arg\max} \; \left\langle\log \left(\frac{1}{Z(\theta)}f(x,y)e^{\theta^\textrm{T}T(x,y)}\right)\right\rangle_{q^{(i)}} \\
+&= \underset{\theta}{\arg\max} \; \left\langle\theta^\textrm{T}T(x,y)\right\rangle_{q^{(i)}} - \log Z(\theta) \\
+&= \underset{\theta}{\arg\max} \; \theta^\textrm{T}\left\langle T(x,y)\right\rangle_{q^{(i)}} - \log Z(\theta) \\
+\end{align*}
+Thus, in practice our E-step usually consists only of computing expectations of the sufficient statistics of the joint with respect to the posterior distribution over latents $q^{(i)}(\mathcal{Y}) = P(\mathcal{Y}|\mathcal{X},\theta^{(i-1)})$, rather than actually computing the whole distribution. This can simplify things greatly (e.g. in latent chain models, where sufficient stats are single or pairs of latent variables rather than the whole chain).
+
+In general, computing these expectations - what we call \emph{inference} - will be the hardest part. Latent variable posterior distributions are often of a form that leads to intractable integrals when computing expectations, requiring either Monte Carlo sampling approximations to the integrals or variational approximations of the distributions themselves (section \ref{inference}).
+
+\subsection{Generalized EM}
+Sometimes, there is no closed form solution to the maximization problem posed by the M-step. In this case, we can fall back to gradient ascent:
+\begin{align*}
+\theta^{(i)} &= \theta^{(i-1)} + \eta\left(\frac{\partial}{\partial \theta}\Bigr|_{\theta^{(i-1)}}\mathcal{F}(q^{(i)},\theta)\right) \\
+&= \theta^{(i-1)} + \eta\left(\frac{\partial}{\partial \theta}\Bigr|_{\theta^{(i-1)}}\mathcal{F}(q^{(i)},\theta)\right) \\
+&= \theta^{(i-1)} + \eta\left(\frac{\partial}{\partial \theta}\Bigr|_{\theta^{(i-1)}}\langle\log P(\mathcal{X},\mathcal{Y}|\theta)\rangle_{q^{(i)}}\right)
+\end{align*}
+where $\eta$ is a learning rate. Since after the E-step $\mathcal{F}(q,\theta) = \ell(\theta)$, we can be sure this step is a step up the gradient of the true log likelihood.
+
+Such an M-step is called a \emph{partial M-step}, and the algorithm is called \emph{generalized EM}. We can also take \emph{partial E-steps} by, for example, updating the posterior distribution with respect to only a subset of latent variables.
+
+\subsection{EM for MAP}
+We can also use EM for MAP parameter estimation under some prior $P(\theta)$. The E-step remains the same, since it assumes the previous point estimates of the parameters. The M-step is modified to incorporate the prior distribution:
+\begin{align*}
+\theta^{(i)} &= \underset{\theta}{\arg\max} \; \left\langle\log P(\mathcal{X},\mathcal{Y},\theta)\right\rangle_{q^{(i)}} \\
+&= \underset{\theta}{\arg\max} \; \left\langle\log P(\mathcal{X},\mathcal{Y}|\theta) + \log P(\theta)\right\rangle_{q^{(i)}} \\
+&= \underset{\theta}{\arg\max} \; \left\langle\log P(\mathcal{X},\mathcal{Y}|\theta)\right\rangle_{q^{(i)}}  + \log P(\theta) \\
+\end{align*}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% INFERENCE %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Approximate Inference} \label{inference}
+\emph{Inference} is the E-step of EM, i.e. calculating the posterior distribution over latents:
+\[ q^{new}(\mathcal{Y}) = \underset{q}{\arg\max}\, \mathcal{F}(q,\theta) = \underset{q}{\arg\min}\, \textrm{KL}\left[q(\mathcal{Y}\|P(\mathcal{Y}|\mathcal{X},\theta)\right] = P(\mathcal{Y}|\mathcal{X},\theta) \]
+In practice, we don't usually ever have to compute the full posterior, but expectations of the log joint $P(\mathcal{X},\mathcal{Y})$ sufficient statistics with respect to the posterior. Often, computing the full posterior or expectations with respect to it is intractable, so we resort to approximations:
+
+\subsection{Variational Inference}
+In variational inference, we constrain the posterior to be in a certain family of distributions $\mathcal{Q}$ that are easy to work with:
+\[ q^{new}(\mathcal{Y}) = \underset{\color{red}{q\in\mathcal{Q}}}{\arg\max}\, \mathcal{F}(q,\theta) \]
+Of course, unless the true posterior lies in $\mathcal{Q}$, the approximation implies that we will never saturate the free energy lower bound at the E-step. Thus, EM with a variational E-step won't reach a maximum of the log likelihood, but should still converge to a relatively good solution.
+
+One approach is to pick $\mathcal{Q}$ to be a certain probability distribution $\mathcal{P}_\eta(y)$ parametrized by some set of parameters $\eta$ (e.g. Gaussian, with $\eta = [\mu \; \Sigma]$), transforming the E-step into a simpler parameter estimation problem:
+\[ \eta^{new} = \underset{\eta}{\arg\min}\, \textrm{KL}\left[\mathcal{P}_\eta(\mathcal{Y}|\eta) \| P(\mathcal{Y}|\mathcal{X},\theta)\right] \]
+
+Another alternative is a \emph{factored variational approximation}, where we enforce $q(\mathcal{Y})$ to be factorizable over disjoint sets $\mathcal{Y}_k$ that partition the set of all latents $\mathcal{Y}$:
+\[ \mathcal{Q} = \left\{q(\mathcal{Y}) = \prod_k q_k(\mathcal{Y}_k): \forall i\neq j \mathcal{Y}_i \cap \mathcal{Y}_j = \emptyset,\, \mathcal{Y}_1\cup\mathcal{Y}_2\cup\ldots = \mathcal{Y}  \right\} \]
+We can then estimate each individual marginal $q_k(\mathcal{Y}_k)$ by setting variational derivatives of the free energy lower bound to 0 and solving, using Lagrange multipliers to constrain each marginal to sum to 1:
+\begin{align*}
+0 &= \frac{\delta}{\delta q_k} \left[ \mathcal{F}(q,\theta) + \lambda\left(\int\textrm{d}\mathcal{Y}_k\, q_k(\mathcal{Y}_k) - 1\right) \right] \\
+&= \frac{\delta}{\delta q_k} \left[ \left\langle \log P(\mathcal{X},\mathcal{Y}|\theta) \right\rangle_{\prod_{k'}q_{k'}} + \textrm{H}[q] \right] + \frac{\delta}{\delta q_k}\lambda\left(\int\textrm{d}\mathcal{Y}_k\, q_k(\mathcal{Y}_k) - 1\right) \\
+&= \frac{\delta}{\delta q_k} \left[ \int\textrm{d}\mathcal{Y}_k\, q_k(\mathcal{Y}_k) \int\textrm{d}\mathcal{Y}_{k' \neq k}\, \prod_{k'\neq k} q_{k'}(\mathcal{Y}_{k'}) \log P(\mathcal{X},\mathcal{Y}|\theta) \right] + \frac{\delta}{\delta q_k} \sum_{k'} \textrm{H}[q_{k'}] + \lambda \\
+&= \frac{\delta}{\delta q_k} \left[ \int\textrm{d}\mathcal{Y}_k\, q_k(\mathcal{Y}_k) \left\langle \log P(\mathcal{X},\mathcal{Y}|\theta) \right\rangle_{\prod_{k'\neq k}q_{k'}} \right] + \frac{\delta}{\delta q_k} \left[-\int\textrm{d}\mathcal{Y}_k\, q_k(\mathcal{Y}_k) \log q_k(\mathcal{Y}_k) \right] + \lambda \\
+&= \left\langle \log P(\mathcal{X},\mathcal{Y}|\theta) \right\rangle_{\prod_{k'\neq k}q_{k'}} - \left(1 + \log q_k(\mathcal{Y}_k) \right) + \lambda \\
+\Leftrightarrow q_k(\mathcal{Y}_k) &\propto \exp\left[ \left\langle \log P(\mathcal{X},\mathcal{Y}|\theta) \right\rangle_{\prod_{k'\neq k}q_{k'}} \right]
+\end{align*}
+
+For an observation-joint latent distribution with DAG structure
+\[ P(\mathcal{X},\mathcal{Y}) = \prod_i P(Z_i|\textrm{Pa}(Z_i)) \]
+(where $\{Z_i\}$ are all the nodes - observed or latent - in the graph), we obtain the following approximate posterior marginals for each disjoint latent subset $\mathcal{Y}_k$:
+\begin{align*}
+q_k(\mathcal{Y}_k) &\propto \exp\left[\sum_i \left\langle \log P(Z_i|\textrm{Pa}(Z_i))\right\rangle_{\prod_{k'\neq k}q_{k'}} \right] \\
+&\propto \exp\left[\sum_{i\in \mathcal{Y}_k} \left\langle\log P(Y_i|\textrm{Pa}(Y_i))\right\rangle_{\prod_{k'\neq k}q_{k'}} + \sum_{i\in \textrm{Ch}(\mathcal{Y}_k)} \left\langle \log P(Z_i|\textrm{Pa}(Z_i))\right\rangle_{\prod_{k'\neq k}q_{k'}} \right] \\
+\end{align*}
+In other words, each $\mathcal{Y}_k$ marginal incorporates information only from the Markov boundaries of its elements: each node receives messages from only its Markov boundary. For complicated graphs, it is often useful to factorize $q(\mathcal{Y})$ into a product of distributions on subtrees $\mathcal{Y}_k$. This is called a \emph{structured variational approximation}. An example application of this approach is for inference in FHMMs (section \ref{factorial hmm}), where each $\mathcal{Y}_k$ is a different latent chain. The DAG structure then allows for explaining away between the different latent chains via the log likelihood. 
+
+\subsubsection{Mean-Field Approximation}
+If the sufficient statistics of the observation-latent joint are separable in the latent variables $\{y_k\}$, then it is useful to perform factored variational inference with a full factorization over all variables: $\mathcal{Y}_k = y_k$. The resulting approximation is called a \emph{mean-field approximation}, since the resulting marginals $q_k(y_k)$ depend only on the means of the latents in the Markov boundary $\mathcal{V}_k$ of $y_k$: the \emph{mean field} imposed by $\mathcal{V}_k$. The resulting inference algorithm is then to keep updating each of these marginals until all the means agree.
+
+The classic example of this is inference in the Boltzmann machine:
+\begin{align*}
+\log P(\mathcal{X,Y}) &= \sum_{(ij)} W_{ij}s_is_j + \sum_i b_i s_i - \log Z \\
+\Rightarrow \left\langle\log P(\mathcal{X,Y})\right\rangle_{\prod_i q_i(s_i)} &= \sum_{(ij)} W_{ij}\langle s_i\rangle_{q_i} \langle s_j\rangle_{q_j} + \sum_i b_i \langle s_i\rangle_{q_i} - \log Z \\
+q_i(s_i) &
+\begin{cases} 
+\propto \exp\left[ b_i s_i + \sum_{(ij)} W_{ij}s_i\langle s_j\rangle_{q_j}\right] & \text{if }s_i\in\mathcal{Y} \\
+= \delta(s_i = x_i) & \text{if }s_i\in\mathcal{X}
+\end{cases}
+\end{align*}
+We can then infer the states of the hidden variables $s_i\in\mathcal{Y}$ by iteratively updating each $q_i$ until convergence, i.e. until the mean fields agree.
+
+Mean-field learning can also be used for inference in the factorial HMM, yielding an approximate message passing algorithm analogous to the forward-backward algorithm (section \ref{factorial hmm}).
+
+\subsection{Expectation Propagation} \label{EP}
+In an arbitrary DAG, the posterior distribution over latents factorizes as follows:
+\begin{align*}
+P(\mathcal{Y}|\mathcal{X}) &= \frac{P(\mathcal{X,Y})}{P(\mathcal{X})} = \frac{\prod_{\text{nodes } k} P(Z_k|\textrm{Pa}(Z_k))}{P(\mathcal{X})} \\
+&= \frac{1}{Z} \prod_i P(Y_i|\textrm{Pa}(Y_i)) \\
+&= \frac{1}{Z} \prod_i f_i(\mathcal{Y}_i), \; \mathcal{Y}_i = Y_i \cup \textrm{Pa}(Y_i)
+\end{align*}
+Often the factors $f_i$ are intractable (e.g. NLSSM), so we need to approximate them to be able to perform inference. Notably, we can't use a factored variational approach, since the $\mathcal{Y}_i$ aren't disjoint. 
+
+One alternative is to use a parametric variational approach, but it turns out that, in practice, there is better alternative, called \emph{expectation propagation} (EP). In EP, we approximate the factors with
+\[ f_i(\mathcal{Y}_i) \approx \tilde{f}_i(\mathcal{Y}_i) \]
+giving us the approximate posterior
+\[ P(\mathcal{Y}|\mathcal{X}) \approx q(\mathcal{Y}) = \prod_i \tilde{f}_i(\mathcal{Y}_i) \]
+that we can then use for inference. The key move is that, rather than approximating the full posterior by minimizing the free energy lower bound - i.e.
+\[ q(\mathcal{Y}) = \underset{q(\mathcal{Y}) = \prod_i \tilde{f}_i(\mathcal{Y}_i)}{\arg\min}\, \textrm{KL}\left[q(\mathcal{Y}) \| P(\mathcal{Y}|\mathcal{X}) \right] \]
+-, in EP we instead approximate each factor individually by minimizing
+\[ \tilde{f}_i(\mathcal{Y}_i) = \underset{\tilde{f}_i}{\arg\min}\, \textrm{KL}\left[ f_i(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i) \| \tilde{f}_i(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i) \right] \]
+where
+\begin{align*}
+q_{\neg i}(\mathcal{Y}_i) &= \int \textrm{d}\mathcal{Y}_{j \neq i} \frac{q(\mathcal{Y})}{\tilde{f}_i(\mathcal{Y}_i)} \\
+&= \int \textrm{d}\mathcal{Y}_{j \neq i} \prod_{j \neq i}\tilde{f}_j(\mathcal{Y}_j)
+\end{align*}
+is called the \emph{cavity distribution}. In a tree, for example, we can see the cavity distribution as a product of messages from all nodes neighboring the approximate factor $\tilde{f}_i$ being estimated:
+\[ q_{\neg i}(\mathcal{Y}_i) = \prod_{j \in \textrm{ne}(i)} M_{j\rightarrow i}(\mathcal{Y}_i) \]
+We then proceed by iteratively updating each factor in turn until convergence. Note that becase this KL divergence doesn't correspond to any bound on the true log likelihood, we now have no guarantee of convergence. However, when EP does converge, in practice it tends to give better estimates than variational inference (see figure 10.17 in Bishop). 
+
+Noting the differences with the regular KL divergence that is minimized in EM gives some intuition for why this works: 
+\begin{itemize}
+\item Firstly, we minimize a KL divergence with respect to each factor one-by-one, rather than minimizing with respect to the whole posterior directly. This allows for tractability in the face of complicated posteriors, at the expense of exact inference.
+\item Importantly, however, the KL divergence that is minimized always contains all the other estimated factors via the cavity distribution, allowing them to inform each other. Thus, by iteratively updating each factor one-by-one, EP approximates \emph{local} factors in a \emph{globally} sensitive manner.
+\item Lastly, note that the factors we want to approximate appear on the opposite side of the KL divergence (on the right, rather than the left). This means that the approximating distribution $q(\mathcal{Y}_i) = \tilde{f}(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i)$ falls inside the logarithm. So, if we pick our approximating factors $\tilde{f}(\mathcal{Y}_i)$ such that $q(\mathcal{Y}_i)$ is exponential family, this will yield to a simple solution to the KL minimization problem (next).
+\end{itemize}
+
+So let's pick our approximating factors $\tilde{f}_i$ such that $\tilde{f}_i(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i) = \frac{1}{Z(\theta)}e^{\theta^\textrm{T}T(\mathcal{Y}_i)} = \mathcal{P}_\theta(\mathcal{Y}_i)$ is an exponential family distribuition with natural parameters $\theta$. If we now formulate the KL minimization problem as a minimization of the KL divergence between $\mathcal{P}_\theta(\mathcal{Y}_i)$ and $\tilde{\mathcal{P}}(\mathcal{Y}_i) = f_i(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i)$, we get a simple moment matching solution:
+\begin{align*}
+\hat{\mathcal{P}}_\theta(\mathcal{Y}_i) &= \underset{\mathcal{P}_\theta}{\arg\min}\, \textrm{KL}\left[\tilde{\mathcal{P}}(\mathcal{Y}_i) \| \mathcal{P}_\theta(\mathcal{Y}_i) \right] \\
+&= \underset{\theta}{\arg\min}\, \textrm{KL}\left[\tilde{\mathcal{P}}(\mathcal{Y}_i) \| \frac{1}{Z(\theta)}e^{\theta^\textrm{T}T(\mathcal{Y}_i)} \right] \\
+&= \underset{\theta}{\arg\min}\, -\int \textrm{d}\mathcal{Y}_i\, \tilde{\mathcal{P}}(\mathcal{Y}_i) \log\left(\frac{1}{Z(\theta)}e^{\theta^\textrm{T}T(\mathcal{Y}_i)}\right) \\
+&= \underset{\theta}{\arg\min}\, -\theta^\textrm{T} \left\langle T(\mathcal{Y}_i) \right\rangle_{\tilde{\mathcal{P}}} + \log Z(\theta) \\
+\Leftrightarrow 0 &= -\frac{\partial}{\partial \theta} \theta^\textrm{T} \left\langle T(\mathcal{Y}_i) \right\rangle_{\tilde{\mathcal{P}}} + \frac{\partial}{\partial \theta}\log Z(\theta) \\
+&= -\left\langle T(\mathcal{Y}_i) \right\rangle_{\tilde{\mathcal{P}}} + \left\langle T(\mathcal{Y}_i) \right\rangle_{\mathcal{P}_\theta} \\
+\Leftrightarrow \left\langle T(\mathcal{Y}_i) \right\rangle_{\tilde{\mathcal{P}}} &= \left\langle T(\mathcal{Y}_i) \right\rangle_{\mathcal{P}_\theta}
+\end{align*}
+In other words, minimize the KL divergence by finding the natural parameters $\theta$ of the exponential family distribution $\mathcal{P}_\theta(\mathcal{Y}_i)$ such that its expected sufficient statistics are equal to their expectation under the distribution $\tilde{\mathcal{P}}(\mathcal{Y}_i)$. Then, we have:
+\[ \tilde{f}_i(\mathcal{Y}_i) = \frac{\hat{\mathcal{P}}_\theta(\mathcal{Y}_i)}{q_{\neg i}(\mathcal{Y}_i)} \]
+One important caveat to this algorithm is that it requires computing expectations with respect to $\tilde{\mathcal{P}}$, which will usually require numerical integration methods, or a Monte Carlo sampling approximation.
+
+We can use EP to compute approximate messages on a graph where message passing would be otherwise intractable (e.g. NLSSM, section \ref{nlssm}). In fact, it turns out that loopy BP is actually an instantiation of EP, where we approximate the pairwise factors in the graph as a product of messages:
+\begin{gather*}
+P(\mathcal{X}) = \frac{1}{Z} \prod_i f_i(X_i) \prod_{(ij)} f_{ij}(X_i,X_j) \\
+f_{ij}(X_i,X_j) \approx \tilde{f}_{ij}(X_i,X_j) = M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j)
+\end{gather*}
+giving the approximate joint distribution
+\begin{align*}
+\Rightarrow \tilde{P}(\mathcal{X}) &= \frac{1}{Z} \prod_i f_i(X_i) \prod_{(ij)} M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j) \\
+&= \frac{1}{Z} \prod_i \left[f_i(X_i) \prod_{j\in\textrm{ne}(i)} M_{j \rightarrow i}(X_i) \right]
+\end{align*}
+Marginalizing over all $X_{k\neq i,j}$, we get the following cavity distribution:
+\begin{align*}
+q_{\neg ij}(X_i,X_j) &\propto \frac{1}{M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j)} \sum_{\mathcal{X}\setminus X_i,X_j} \prod_k \left[f_k(X_k) \prod_{k'\in\textrm{ne}(k)} M_{k' \rightarrow k}(X_k) \right] \\
+&\propto \left( f_i(X_i) \prod_{k\in\textrm{ne}(i)\setminus j} M_{k \rightarrow i}(X_i)\right) \left(f_j(X_j) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j)\right) \sum_{\mathcal{X}\setminus X_i,X_j} \prod_{k\neq i,j} \left[f_k(X_k) \prod_{k'\in\textrm{ne}(k)} M_{k' \rightarrow k}(X_k) \right] \\
+&= \frac{1}{Z} f_i(X_i)f_j(X_j) \prod_{k\in\textrm{ne}(i)\setminus j} M_{k \rightarrow i}(X_i)\prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j)
+\end{align*}
+Minimizing the KL divergence
+\[ \textrm{KL} \left[ f_{ij}(X_i,X_j)q_{\neg ij}(X_i,X_j) \| M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j)q_{\neg ij}(X_i,X_j) \right] \]
+we note that at the minimum (dropping the normalizers)
+\begin{align*}
+&f_{ij}(X_i,X_j)q_{\neg ij}(X_i,X_j) = M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j)q_{\neg ij}(X_i,X_j) \\
+\Leftrightarrow \sum_{X_j} &f_{ij}(X_i,X_j)q_{\neg ij}(X_i,X_j) = \sum_{X_j} M_{j \rightarrow i}(X_i) M_{i \rightarrow j}(X_j)q_{\neg ij}(X_i,X_j) \\
+\Leftrightarrow \left(f_i(X_i) \prod_{k\in\textrm{ne}(i)\setminus j} M_{k \rightarrow i}(X_i)\right) &\sum_{X_j} f_{ij}(X_i,X_j) \left(f_j(X_j) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j)\right) \\
+\phantom{{}=15} = M_{j \rightarrow i}(X_i) &\left(f_i(X_i) \prod_{k\in\textrm{ne}(i)\setminus j} M_{k \rightarrow i}(X_i)\right) \sum_{X_j} M_{i \rightarrow j}(X_j) \left(f_j(X_j) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j)\right) \\
+\Leftrightarrow \sum_{X_j} &f_{ij}(X_i,X_j) f_j(X_j) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j) = \frac{1}{Z} M_{j \rightarrow i}(X_i) \\
+\Rightarrow &\boxed{M_{j \rightarrow i}(X_i) \propto \sum_{X_j} f_{ij}(X_i,X_j) f_j(X_j) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j)}
+\end{align*}
+which is exactly the expression for belief propagation messages. In otherwords, marginal posteriors obtained via belief propagation on a loopy graph (loopy BP) are the EP approximation to the true posteriors. This explains why loopy BP yields good solutions whenever it converges.
+
+\subsubsection{Power EP}
+Because convergence can be a problem in EP, it is often useful to resort to \emph{power EP} methods that make the EP updates more gradual to encourage convergence:
+\[ \tilde{f}^{new}_i(\mathcal{Y}_i) = \underset{\tilde{f}}{\arg\min}\, \textrm{KL}\left[ f_i(\mathcal{Y}_i)^\alpha \tilde{f}^{old}_i(\mathcal{Y}_i)^{1-\alpha} q_{\neg i}(\mathcal{Y}_i) \| \tilde{f}(\mathcal{Y}_i)q_{\neg i}(\mathcal{Y}_i) \right]\]
+with $\alpha < 1$. In this case, the left side of the KL contains a mixture of the true factor with its approximation in the previous iteration, making the updates more gradual and thus more likely to converge.
+
+\subsubsection{My EP recipe}
+\begin{enumerate}
+\item Pick a set of singleton or pairwise (or both) factors $f_i(x_i)$ or $g_{ij}(x_i,x_j)$ to approximate (doesn't have to be all of them)
+\item Pick an exponential family to approximate this factor with $\tilde{f}_i(x_i) = \frac{1}{Z(\theta_i)}\textrm{f}(x_i)\exp[\theta_i^\textrm{T}T(x_i)]$
+\item Write the approximate marginal joint distribution that follows from the factor approximation: 
+\[ \tilde{P}(\mathcal{X}) = \prod_{\textrm{nodes }i}\tilde{f}(x_i)\prod_{\textrm{edges }(ij)}g_{ij}(x_i,x_j)\]
+\item For a given singleton factor $f_i(x_i)$, compute the cavity distribution as
+\[ q_{\neg i}(x_i) = \frac{\tilde{P}(x_i)}{\tilde{f}_i(x_i)}, \quad\quad \tilde{P}(x_i) = \int\ldots\int \textrm{d}x_{\neg i}\, \tilde{P}(\mathcal{X}) \]
+For a pairwise factor, compute the pairwise marginal.
+\item Write out $\mathcal{P}_\theta(x_i) = \tilde{f}_i(x_i)q_{\neg i}(x_i)$ in exponential family form and derive the mean sufficient statistic as a function of $\theta$ 
+\[ \langle T(x_i)\rangle_{\mathcal{P}_\theta} = \frac{\partial}{\partial \theta}\log Z(\theta) \]
+\item Write out $\tilde{\mathcal{P}}(x_i) = f_i(x_i)q_{\neg i}(x_i)$, and compute the expectation of $T(x_i)$ with respect to this distribution, $\langle T(x_i)\rangle_{\tilde{\mathcal{P}}}$
+\item Solve for $\theta^*$ by moment matching:
+\begin{align*}
+\langle T(x_i)\rangle_{\mathcal{P}_\theta} &= \langle T(x_i)\rangle_{\tilde{\mathcal{P}}} \\
+\Leftrightarrow \frac{\partial}{\partial \theta}\log Z(\theta) &= \langle T(x_i)\rangle_{\tilde{\mathcal{P}}}
+\end{align*}
+giving us the parameter setting $\theta = \theta^*$ that matches the first moment of our approximate marginal $\mathcal{P}_\theta(x_i)$ with that of the less approximate marginal $\tilde{\mathcal{P}}(x_i)$.
+\item Using our newfound optimal parameter setting $\theta^*$, update $\tilde{f}_i$ by:
+\[ \tilde{f}_i^{new}(x_i) \leftarrow \frac{\mathcal{P}_{\theta^*}(x_i)}{q_{\neg i}(x_i)} \]
+\item Repeat steps 4-8 for each factor, iterating over all factors multiple times until convergence. At each iteration, we update a single factor and the cavity distribution.
+\end{enumerate}
+
+\subsection{Sampling Methods}
+\subsubsection{Simple Monte Carlo}
+\subsubsection{Importance Sampling}
+Mention Sampling-Importance Resampling (SIR) (e.g. particle filtering), Annealed Importance Sampling (AIS) (e.g. for evaluating the evidence)
+\subsubsection{Rejection Sampling}
+\subsubsection{Markov Chain Monte Carlo (MCMC)}
+\subsubsection{Hamiltonian Monte Carlo}
+\subsubsection{Slice Sampling}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% GRAPHICAL MODELS %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Graphical Models}
+A graph $\mathcal{G}$ is a way of representing a family of probability distributions
+\begin{itemize}
+\item $\mathcal{P}_{\mathcal{C}(\mathcal{G})}$ that satisfy the set of conditional independence statements $\mathcal{C}(\mathcal{G})$ implied by $\mathcal{G}$
+\item $\mathcal{P}_\mathcal{G}$ that factor as implied by $\mathcal{G}$
+\end{itemize}
+All graphs imply a certain set of conditional independence statements and a certain factorization of the probability distribution. Whether $\mathcal{P}_{\mathcal{C}(\mathcal{G})}$ and $\mathcal{P}_\mathcal{G}$ are necessarily the same set depends on the type of graph.
+
+One important notion when considering conditional independence is the \emph{Markov blanket} $\mathcal{V}$ of a random variable $X$:
+\[ \mathcal{V} = \{V : \forall X'\notin \mathcal{V}\cup X; X \perp\!\!\!\perp X'|\mathcal{V} \} \]
+where the notation $X \perp\!\!\!\perp Y|Z$ indicates conditional independence: $P(X|Y,Z) = P(X|Z)$. The \emph{Markov boundary} of $X$ is the minimal Markov blanket.
+
+\subsection{Types of Graphs}
+
+\subsubsection{Factor Graph}
+Factor graphs imply the following factorization over \emph{factor potentials} $f_i$:
+\[ P(\mathcal{X}) = \frac{1}{Z} \prod_i f_i(\textrm{ne}(f_i)) \]
+Conditional independence in factor graphs is easy to to read off the graph: $X \perp\!\!\!\perp Y|\mathcal{V}$ iff every path between $X$ and $Y$ includes some node $V\in \mathcal{V}$. The Markov boundary of a node $X$ is thus its neighbors $\textrm{ne}(X)$. For an arbitrary factor graph $\mathcal{G}$, it is not necessarily the case that $\mathcal{P}_{\mathcal{C}(\mathcal{G})} = \mathcal{P}_\mathcal{G}$
+
+\subsubsection{Undirected Graph (Markov Net)}
+Implies a factorization over maximal cliques $\mathcal{X}_{\mathcal{C}_i}$:
+\[ P(\mathcal{X}) = \frac{1}{Z} \prod_i f_i(\mathcal{X}_{\mathcal{C}_i}) \]
+where $f_i$ are called the \emph{clique potentials} and a clique is defined as a fully connected subgraph. A clique is maximal if it is not contained inside any other clique. Conditional independence is determined just like factor graphs and the Markov boundary is the same. However, $\mathcal{P}_{\mathcal{C}(\mathcal{G})} = \mathcal{P}_\mathcal{G}$ for any arbitrary undirected graph $\mathcal{G}$ such that $P(\mathcal{X})>0$ for all possible $\mathcal{X}$.
+
+\subsubsection{Directed Acyclic Graph (DAG, or Bayes net)} \label{dags}
+Dependencies are made explicit, leading to the following factorization over all nodes:
+\[ P(\mathcal{X}) = \prod_i P(X_i|\textrm{Pa}(X_i)) \]
+where $\textrm{Pa}(X_i))$ designates the parents of node $X_i$. As opposed to the factor and undirected graphs, DAGs can imply marginal independence as well as conditional independence between connected nodes. However, reading conditional independence statements from the graph becomes more complicated: $X \perp\!\!\!\perp Y|\mathcal{V}$ iff the path between nodes $X$ and $Y$ is \emph{blocked}. A path is \emph{blocked} iff there is a node $V$ on the path that
+\begin{itemize}
+\item has non-convergent arrows and is in $\mathcal{V}$
+\item has convergent arrows, is not in $\mathcal{V}$, and neither are any of its descendants
+\end{itemize}
+This set of criteria is called $d$-separation. $X \perp\!\!\!\perp Y|\emptyset$ (marginal independence) iff there is no path at all between $X$ and $Y$ (just like in factor and undirected graphs) OR if the path between $X$ and $Y$ meets at some node with convergent arrows. The fact that two connected nodes $X$ and $Y$ can have marginal independence allows us to model the situation that is often called \emph{explaining away}, whereby observation of $X$ doesn't change your belief about $Y$ because the corresponding change in your belief about the node at which the path between them meets (with convergent arrows) is explained away by the observation and thus says nothing about $Y$. The classic example of this observing that your grass is wet and then realizing that the sprinklers were left on over night: this realization leaves your belief that it rained unchanged even though your observation would suggest that otherwise.
+
+The Markov boundary of a node $X$ in a DAG is its parents, children, and parents of children:
+\[ \left\{\textrm{Pa}(X) \cup \textrm{Ch}(X) \cup \textrm{Pa}(\textrm{Ch}(X))\right\} \]
+For any arbitrary DAG $\mathcal{G}$, $\mathcal{P}_{\mathcal{C}(\mathcal{G})} = \mathcal{P}_\mathcal{G}$.
+
+\subsubsection{Expressive Power of different types of graphs}
+The set of probability distributions representable as a DAG overlaps with that representable as an undirected graph. However, the set of distributions representable as a factor graph includes all distributions representable as an undirected graph.
+
+\subsubsection{Trees}
+A tree is a graph where there is a single unique path between any two nodes. When the graph is a DAG, this implies that there is at least one ``root'' node that has no parents. When the graph is an undirected graph, this implies that all maximal cliques are of size 2. Importantly, any such DAG with a single root is equivalent to the corresponding undirected tree, and any undirected tree is equivalent to a single rooted DAG tree. 
+
+To see the first equivalence, note that the tree structure plus the fact that there is a single root implies that each node has only a single parent. The distribution then necessarily factors into pairwise factor/clique potentials:
+\begin{align*}
+P(\mathcal{X}) &= P(X_r)\prod_{i\neq r} P(X_i|\textrm{Pa}(X_i)) \\
+&= P(X_r) \prod_{i\neq r} f_i(X_i \cup \textrm{Pa}(X_i)) \\
+&= \frac{1}{Z} \prod_{(ij)} f_{ij}(X_i,X_j)
+\end{align*}
+where $X_r$ is the root node. The the third equality follows from the fact that each node has only one parent, so $X_i \cup \textrm{Pa}(X_i) = \{X_i,X_j\}$. Thus, the corresponding undirected tree with size 2 maximal cliques is equivalent to the original DAG tree. It is easy to see that in addition to the equivalent factorization, the conditional and marginal independence statements are the same. This follows from the important fact that there are no collider nodes in a single-rooted directed tree, so ``explaining away'' doesn't happen in DAG trees. Therefore, all conditional and marginal dependence statements implied by a DAG tree are also possible to express with an undirected tree. 
+
+To see the opposite direction (any undirected tree is equivalent to a DAG tree), we first note that the probability distribution of any DAG can be expressed as a product of pairwise and singleton marginals:
+\begin{align*}
+P(\mathcal{X}) &= P(X_r)\prod_{i\neq r} P(X_i|\textrm{Pa}(X_i)) \\
+&= P(X_r)\prod_{j\rightarrow i} P(X_i|X_j) \\
+&= P(X_r)\prod_{j\rightarrow i} \frac{P(X_i,X_j)}{P(X_j)P(X_i)}P(X_i) \\
+&= P(X_r)\prod_{i\neq r}P(X_i) \prod_{j\rightarrow i} \frac{P(X_i,X_j)}{P(X_j)P(X_i)} \\
+&= \prod_i P(X_i) \prod_{(ij)} \frac{P(X_i,X_j)}{P(X_j)P(X_i)} \\
+&= \frac{\prod_{(ij)} P(X_i,X_j)}{\prod_i P(X_i)^{\textrm{deg}(i)-1}} \\
+\end{align*}
+where $j\rightarrow i$ indexes all directed edges pointing from $j$ to $i$, and $\textrm{deg}(i)$ is the \emph{degree} of the $i$th node, i.e. the number of neighbors of node $i$. Thus, given the pairwise and singleton marginals of an undirected tree (which we can compute via BP, below), it is evident from the above derivation that there is an equivalent single rooted DAG. In fact there are several, which we can find by simply picking an arbitrary node in the undirected graph to be the root and making all directed edges flow away from it. The above derivation shows that the joint distributions of all such DAG trees are equivalent to that of the original undirected tree.
+
+\subsection{Inference on Trees: Belief Propagation}
+\emph{Learning} in graphical models is usually relatively easy: you just need expectations with respect to marginal posteriors on cliques. But computing these marginal posteriors - i.e. \emph{inference} - can be quite costly, since it requires summing over all possible settings of the remaining nodes in the graph outside of the given clique ($\mathcal{O}(K^{N-1})$ for $N$ total nodes that can each take on $K$ possible states), rendering inference computationally intractable for graphs of any relatively useful size. In the case of trees, however, we can bypass these costly sums by using a recursive message passing algorithm that allows us to perform marginalization efficiently in $\mathcal{O}(NK^2)$ time. The algorithm is called \emph{belief propagation}.
+
+As discussed above, a tree (directed or undirected) factorizes over pairwise factors:
+\[ P(\mathcal{X}) = \frac{1}{Z} \prod_{(ij)} f_{ij}(X_i,X_j) \]
+We can then calculate the marginal distribution over node $X_i$ in the resulting undirected tree by computing incoming \emph{messages} from its neighbors:
+\begin{align*}
+P(X_i) &= \sum_{\mathcal{X}\setminus X_i} P(\mathcal{X}) \\
+&\propto \sum_{\mathcal{X}\setminus X_i} \prod_{(kk')}f_{kk'}(X_k,X_{k'}) \\
+&\propto \sum_{\mathcal{X}\setminus X_i} \prod_{j\in\textrm{ne}(X_i)}\left[f_{ij}(X_i,X_j)\prod_{(kk')\in T_{j \rightarrow i}}f_{kk'}(X_k,X_{k'}) \right] \\
+&\propto \prod_{j\in\textrm{ne}(X_i)} \sum_{X_{l \in T_{j \rightarrow i}}} \left[f_{ij}(X_i,X_j)\prod_{(kk')\in T_{j \rightarrow i}}f_{kk'}(X_k,X_{k'}) \right] \\
+&\propto \prod_{j\in\textrm{ne}(X_i)} \sum_{X_j} \left[f_{ij}(X_i,X_j) \prod_{k\in\textrm{ne}(X_j)\setminus i} \sum_{X_{k' \in T_{k \rightarrow j}}} \left[f_{jk}(X_j,X_k) \prod_{(k'k'')\in T_{k \rightarrow j}}f_{k'k''}(X_{k'},X_{k''}) \right] \right] \\
+&\propto \prod_{j\in\textrm{ne}(X_i)} \sum_{X_j} \left[f_{ij}(X_i,X_j) \prod_{k\in\textrm{ne}(X_j)\setminus i} M_{k\rightarrow j}(X_j) \right] \\
+&\propto \prod_{j\in\textrm{ne}(X_i)} M_{j\rightarrow i}(X_i) \\
+M_{j\rightarrow i}(X_i) &= \sum_{X_j} \left[ f_{ij}(X_i,X_j)\prod_{k\in\textrm{ne}(X_j)\setminus i} M_{k\rightarrow j}(X_j)\right]
+\end{align*}
+where $T_{j \rightarrow i}$ is the subtree separated from node $X_i$ by node $X_j$, including $X_j$. The key to the message passing derivation is the tree structure of the graph that makes each $T_{j \rightarrow i}$ disjoint, allowing us to switch the product and summations in the fourth line. These messages then give us the following singleton and pairwise marginals:
+\begin{align*}
+P(X_i) &\propto \prod_{j\in\textrm{ne}(X_i)} M_{j\rightarrow i}(X_i) \\
+P(X_i,X_j) &\propto f_{ij}(X_i,X_j)\prod_{k\in\textrm{ne}(X_i)\setminus j} M_{k\rightarrow i}(X_i) \prod_{k\in\textrm{ne}(X_j)\setminus i} M_{k\rightarrow j}(X_j)
+\end{align*}
+
+Importantly, given some observed node $X_a$ and some e.g. latent node $X_i$ we can exploit the tree structure to perform inference by computing the posterior as
+\[ P(X_i|X_a = a) \propto \prod_{j\in\textrm{ne}(X_i)} M_{j\rightarrow i}(X_i) \]
+where
+\[ M_{a\rightarrow k}(X_k) = f_{ak}(X_a = a,X_k) \]
+This follows from the above stated fact that there are no collider nodes in a tree, so, by $d$-separation, we have conditional independence whenever a node on the path between $X_i$ and $X_j$ is observed. Thus, we don't need to consider any incoming messages from nodes on the other side of $X_a$ (which, in the terminology of $d$-separation, is ``blocking'' the path between them and $X_i$), giving us this modified message equation. This crucial property and resulting simplification allows us to perform inference on trees efficiently, via belief propagation. 
+
+In sum, for any tree-structured graph, BP can efficiently compute exact singleton and pairwise marginal posteriors up to a constant of proportionality, which we can easily obtain if the messages are exponential family distributions. When a graph has any loops, however, it loses its tree structure and BP will no longer work. It turns out that running BP anyway (``loopy BP'') will give us good approximate posteriors if it converges, but to obtain exact posteriors we must turn to the Junction Tree algorithm.
+
+\subsection{Inference on Loopy Graphs}
+\subsubsection{Junction Tree Algorithm}
+The Junction Tree algorithm is an algorithm for exact inference on a graph that doesn't have tree structure. It consists of transforming the graph into a so-called junction tree, which has tree structure such that we can use a message-passing algorithm akin to belief propagation to perform inference. While it yields exact posteriors, it requires much computation, as opposed to the efficient but approximate loopy BP algorithm.
+
+To transform the graph into a junction tree, we carry out the following three steps:
+\begin{enumerate}
+\item DAG $\rightarrow$ undirected graph: marry all parents by putting an edge between them (``moralization''), i.e. create a clique out of each node and its parents, fixing observed nodes:
+\begin{align*}
+X_{\mathcal{C}_i} &= X_i \cup \textrm{Pa}(X_i) \\
+f_i(X_{\mathcal{C}_i}) &= P(X_i|\textrm{Pa}(X_i)) \\
+f_{observed}(X_i) &= \delta(X_i = x_i) \quad\text{for observed nodes}
+\end{align*}
+\item Undirected graph $\rightarrow$ chordal graph: add edges so all \textbf{loops} contain $\leq 3$ nodes (``triangulation''). One algorithm for this is called \emph{variable elimination}: eliminate variables one by one, introducing the necessary edges at each elimination to maintain the same conditional independence structure. In this algorithm, the order in which variables are eliminated is really important; two methods are:
+\begin{itemize}
+\item \emph{Minimum deficiency search}: eliminate the variable that will induce the fewest new edges
+\item \emph{Maximum cardinality search}: eliminate the variable with the most previously visited neighbors \todo{no idea what this means...}
+\end{itemize}
+\item Chordal graph $\rightarrow$ junction tree: a \emph{junction tree} is a tree where the nodes are maximal cliques of variables, and the edges, called \emph{separators}, are labelled by the intersection between the cliques corresponding to the nodes connected by that edge. The chordal graph is accordingly transformed into a junction tree with nodes given by its maximal cliques and edges given by their intersections. To turn the resulting graph into a tree, we prune the edges with the fewest shared variables (i.e. the size of the separator, $|\mathcal{X}_{\mathcal{C}_i} \cap \mathcal{X}_{\mathcal{C}_j}|$ for edge $ij$), giving the \emph{maximum-weight spanning tree} (edge weights are separator sizes).
+\end{enumerate}
+
+For inference, we perform a kind of message passing algorithm on the junction tree, called \emph{Shafer-Shenoy propagation}:
+\begin{align*}
+M_{j\rightarrow i}(X_{S_{ij}}) &= \sum_{\mathcal{X}\setminus X_{S_{ij}}} f_j(X_{\mathcal{C}_j}) \prod_{k\in\textrm{ne}(j)\setminus i} M_{k\rightarrow j}(X_{S_{jk}}) \\
+P(X_{\mathcal{C}_i}) &\propto f_i(X_{\mathcal{C}_i}) \prod_{j\in\textrm{ne}(i)} M_{j\rightarrow i}(X_{S_{ij}}) \\
+P(X_{S_{ij}}) &\propto M_{i\rightarrow j}(X_{S_{ij}}) M_{j\rightarrow i}(X_{S_{ij}})
+\end{align*}
+where $X_{\mathcal{C}_i}$ is the set of variables in clique $\mathcal{C}_i$ and $X_{S_{ij}}=X_{\mathcal{C}_i} \cap X_{\mathcal{C}_j}$ is the set of variables in the separator between cliques $\mathcal{C}_i$ and $\mathcal{C}_j$. This message passing phase of the junction tree algorithm is the most costly, with complexity $\mathcal{O}\left(K^{|\mathcal{C}_{max}|}\right)$, where $\mathcal{C}_{max}$ is the largest clique in the junction tree and $K$ is the number of states each variable can take on.
+
+A different way of looking at these message updates is an equivalent message passing algorithm called \emph{Hugin propagation}. By construction, a junction tree has the \emph{running intersection property}: if $X\in\mathcal{C}_i,\mathcal{C}_j$, then all cliques and separators on the path between the junction tree nodes $i$ and $j$ also contain $X$. This property, together with the tree structure of the junction tree graph, implies that \emph{local consistency} between clique and separator marginals $q_i$, $r_{ij}$, i.e.
+\[ \sum_{X_{\mathcal{C}_i\setminus S_{ij}}} q_i(X_{\mathcal{C}_i}) = r_{ij}(X_{S_{ij}}) \]
+guarantees \emph{global consistency}:
+\begin{gather*}
+\sum_{\mathcal{X}\setminus X_{\mathcal{C}_i}} P(\mathcal{X}) = q_i(X_{\mathcal{C}_i}) \\
+\sum_{\mathcal{X}\setminus X_{S_{ij}}} P(\mathcal{X}) = r_{ij}(X_{S_{ij}}) \\
+P(\mathcal{X}) = \frac{\prod_{\textrm{cliques } i}q_i(X_{\mathcal{C}_i})}{\prod_{\textrm{separators } (ij)}r_{ij}(X_{S_{ij}})}
+\end{gather*}
+Hugin propagation expoits this fact to iteratively update the marginals until convergence to the true marginals:
+\begin{align*}
+\text{Initialize:} \quad\quad &q_i(X_{\mathcal{C}_i}) \propto f_i(X_{\mathcal{C}_i}) \\
+&r_{ij}(X_{S_{ij}}) \propto 1 \\
+\text{Update:} \quad\quad &r_{ij}^{new}(X_{S_{ij}}) = \sum_{X_{\mathcal{C}_i\setminus S_{ij}}} q_i(X_{\mathcal{C}_i}) \\
+&q_i^{new}(X_{\mathcal{C}_i}) = q_i(X_{\mathcal{C}_i}) \frac{r_{ij}^{new}(X_{S_{ij}})}{r_{ij}(X_{S_{ij}})}
+\end{align*}
+Since the updates enforce local consistency, the resulting marginals are guaranteed to be globally consistent via the running intersection property.
+
+\subsubsection{Loopy BP} \label{loopy bp}
+As discussed above, the graphical structure of trees - namely the lack of collider nodes - makes inference feasible via belief propagation. In non-trees, however, loops introduce collider nodes and the possibility of marginal independence and explaining away between connected nodes. This nullifies the BP message equations we derived above for inference. However, it turns out that if we run BP on such ``loopy'' graphs anyway, we often get good \emph{approximate} solutions to inference. 
+
+In this case, there is no guarantee of convergence. But whenever it does converge, it turns out that applying the message passing equations gives us approximate marginals that are locally but not globally consistent - what we call \emph{pseudomarginals}. We can see this by noting that loopy BP is equivalent to running BP on each spanning tree of the graph. Recalling Hugin propagation, this implies enforcing each marginal to be locally consistent with respect each spanning tree. Thus, it will converge whenever there is a set of singleton and pairwise pseudomarginals $b_i(X_i)$, $b_{ij}(X_i,X_j)$ that are locally consistent in all the subtrees. These pseudomarginals tend to be good approximations to the true marginals. But, because the graph doesn't have tree structure, local consistency doesn't imply global consistency, so our joint will (likely) be such that:
+\begin{align*}
+P(\mathcal{X}) &= \prod_i b_i(X_i) \prod_{(ij)} \frac{b_{ij}(X_i,X_j)}{b_i(X_i)b_j(X_j)} \\
+\text{where } b_i(X_i) &= \sum_{X_j} b_{ij}(X_i,X_j) \\
+\text{but } b_i(X_i) &\neq \sum_{\mathcal{X}\setminus X_i} P(\mathcal{X})
+\end{align*}
+
+Akin to expectation maximization, we can also interpret loopy BP as finding the pseudomarginals that maximize the \emph{Bethe free energy} $\mathcal{F}_{bethe}$:
+\begin{align*}
+\mathcal{F}_{bethe} &= \epsilon_{bethe}(b) + \mathcal{H}_{bethe}(b) \\
+\epsilon_{bethe}(b) &= \left\langle \log P(\mathcal{X}) \right\rangle_{b(\mathcal{X})} \\
+&= \left\langle \sum_i \log f_i(X_i) + \sum_{(ij)} \log f_{ij}(X_i,X_j) \right\rangle_{\prod_i b_i(X_i) \prod_{(ij)} \frac{b_{ij}(X_i,X_j)}{b_i(X_i)b_j(X_j)}} \\
+&= \sum_i \left\langle\log f_i(X_i)\right\rangle_{b_i} + \sum_{(ij)} \left\langle\log f_{ij}(X_i,X_j)\right\rangle_{b_{ij}} \\
+\mathcal{H}_{bethe}(b) &= \sum_i \textrm{H}[b_i] - \sum_{(ij)}\textrm{KL}[b_{ij}(X_i,X_j)\|b_i(X_i)b_j(X_j)]
+\end{align*}
+In other words, the average energy term $\epsilon_{bethe}(b)$ is equal to the expected log joint as though the pseudomarginals were correct and the entropy term is the sum of the pseudomarginal entropies corrected for pairwise interactions - but ignoring higher order dependencies, thus approximate. Maximizing this under the constraints
+\begin{align*}
+\forall i \quad &\sum_{X_i}b_i(X_i) = 1 \quad \text{w/ Lagrange multiplier } \xi_i \\
+\forall (ij) \quad &\sum_{X_j}b_{ij}(X_i,X_j) = b_i(X_i) \quad \text{w/ Lagrange multiplier } \xi_{ij}(X_i) \\
+&\sum_{X_i}b_{ij}(X_i,X_j) = b_j(X_j) \quad \text{w/ Lagrange multiplier } \xi_{ji}(X_j) \\
+\end{align*}
+yields the following pseudomarginals:
+\begin{align*}
+b_i(X_i) &\propto f_i(X_i)\prod_{j\in\textrm{ne}(i)} e^{-\xi_{ij}(X_i)} \\
+b_{ij}(X_i,X_j) &\propto f_{ij}(X_i,X_j)b_i(X_i)e^{\xi_{ij}(X_i)}b_j(X_j)e^{\xi_{ji}(X_j)}
+\end{align*}
+Enforcing the local consistency constraint $\sum_{X_j}b_{ij}(X_i,X_j) = b_i(X_i)$ we see that these are in fact equivalent to belief propagation message updates:
+\begin{align*}
+b_i(X_i) &= \sum_{X_j} b_{ij}(X_i,X_j) \\
+&\propto \sum_{X_j}f_{ij}(X_i,X_j)b_i(X_i)e^{\xi_{ij}(X_i)}b_j(X_j)e^{\xi_{ji}(X_j)} \\
+\Leftrightarrow e^{-\xi_{ij}(X_i)} &\propto \sum_{X_j}f_{ij}(X_i,X_j)b_j(X_j)e^{\xi_{ji}(X_j)} \\
+&\propto \sum_{X_j}f_{ij}(X_i,X_j)\left[f_j(X_j)\prod_{k\in\textrm{ne}(j)} e^{-\xi_{jk}(X_j)}\right]e^{\xi_{ji}(X_j)} \\
+&\propto \sum_{X_j}f_{ij}(X_i,X_j)f_j(X_j)\prod_{k\in\textrm{ne}(j)\setminus i} e^{-\xi_{jk}(X_j)} \\
+\Leftrightarrow M_{j \rightarrow i}(X_i) &\propto \sum_{X_j}f_{ij}(X_i,X_j)f_j(X_j)\prod_{k\in\textrm{ne}(j)\setminus i} M_{k \rightarrow j}(X_j) \\
+\end{align*}
+with messages $M_{j \rightarrow i}(X_i) = e^{-\xi_{ij}(X_i)}$. Thus, the stable fixed points of belief propagation on a loopy graph (loopy BP) are local maxima of the Bethe free energy.
+
+One important technique that is often used to encourage convergence in loopy BP is called \emph{damping}, where we make the message updates more gradual:
+\[ M_{j \rightarrow i}^{new}(X_i) = (1-\alpha)M_{j \rightarrow i}(X_i) + \alpha \left[\sum_{X_j}f_{ij}(X_i,X_j)f_j(X_j)\prod_{k\in\textrm{ne}(j)\setminus i}M_{k \rightarrow j}(X_j)\right] \]
+with $0 < \alpha < 1$.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% EXPONENTIAL FAMILY %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Exponential Family Distributions} \label{expfam}
+The Exponential Family of probability distributions is the group of all probability distributions with probability (density) function of the form
+\[
+P(x|\theta) = \frac{1}{Z(\theta)}f(x)\exp[\theta^\textrm{T}T(x)]
+\]
+where the vector $\theta$ contains the \textit{natural parameters} of the distribution and the components of the vector $\mathbf{T}(x)$ are called the \textit{sufficient statistics} of the distribution. Given this form, the log likelihood of a set of i.i.d. data $\mathcal{D}=\{x_i\}_{i=1}^N, x_i\overset{\textrm{i.i.d.}}{\sim}P_\theta$, where $P$ is exponential family with natural parameters $\theta$, takes the following form:
+\[
+\ell(\theta) = \log P(\mathcal{D}|\theta) = -N\log Z(\theta) + \left(\sum_{i=1}^N \log f(x_i)\right) + \theta^\textrm{T}\left(\sum_{i=1}^NT(x_i)\right)
+\]
+The simplicity of this likelihood stems from the crucial fact that the natural parameters interact only \emph{linearly} with the sufficient statistics. The exponential form makes maximum likelihood parameter estimation even easier via maximization of the log likelihood. In fact, one can show that maximum likelihood parameter estimation with exponential family distributions is equivalent to \emph{moment matching}, i.e. solving the following equation:
+\[ \left\langle T(x) \right\rangle_{P(x|\theta^\textrm{ML})} = \frac{\partial}{\partial\theta}\log Z(\theta)\Bigr|_{\theta^\textrm{ML}} = \frac{1}{N} \sum_{i=1}^N T(x_i) \]
+
+\subsection{Conjugate-Exponential Models}
+Bayesian parameter estimation with an exponential family likelihood is also greatly simplified when we assume a prior that is \emph{conjugate} to the likelihood: a prior that, when multiplied with the likelihood, leads to a posterior in the same form. For exponential family likelihoods, the conjugate prior is always tractable and with the following general form:
+\[
+P(\theta|\tau,\nu) = F(\tau,\nu)\frac{1}{Z(\theta)^\nu}\exp[\theta^\textrm{T}\tau]
+\]
+where $Z(\theta)$ is the same normalizer from the likelihood function (but now is no longer acting as a normalizer). The resulting posterior is then:
+\begin{align*}
+P(\theta|\mathcal{D}) &\propto \frac{1}{Z(\theta)^{\nu + N}} \exp\left[\theta^\textrm{T}\left(\tau + D\right)\right] \\
+&= F\left(\tau + D,\nu+N\right) \frac{1}{Z(\theta)^{\nu + N}} \exp\left[\theta^\textrm{T}\left(\tau + D\right)\right]
+\end{align*}
+where
+\[ D = \sum_{i=1}^N T(x_i) \]
+It is thus often intuitive to think about the hyperparameters $\tau$ and $\nu$ as \textit{pseudo-observations}, reflecting our prior expectations about the parameters that are subsequently updated by our real observations - namely, the sufficient statistics and the total number of observations, respectively.
+
+This fact can be exploited not only for Bayesian parameter estimation but for learning in latent variable models. If our observation-latent joint distribution is exponential family and the prior distribution over latents is conjugate, then we can easily find the posterior of latents as we did above for parameters (e.g. PPCA).
+
+\subsection{The Log Partition Function and Duality} \label{expfam duality}
+We call the logarithm of the normalizer the log partition function: 
+\[ \phi(\theta) = \log Z(\theta) = \log \int \textrm{d}x \exp[\theta^\textrm{T}T(x)] \]
+for an exponential family distribution with no base factor in $x$ alone $f(x)$. It really important for inference with exponential family distributions because it maps the natural parameters to moments of sufficient statistics via its derivative:
+\begin{align*}
+\frac{\partial \phi}{\partial \theta} &= \frac{1}{Z(\theta)}\int \textrm{d}x \frac{\partial}{\partial \theta}\exp[\theta^\textrm{T}T(x)] \\
+&= \int \textrm{d}x T(x)\frac{1}{Z(\theta)}\exp[\theta^\textrm{T}T(x)] \\
+&= \langle T(x) \rangle_{P(x|\theta)} \\
+\frac{\partial^2 \phi}{\partial \theta^2} &= \frac{\partial \phi}{\partial \theta} \frac{1}{Z(\theta)}\int \textrm{d}x T(x)\exp[\theta^\textrm{T}T(x)] \\
+&= \frac{1}{Z(\theta)}\int \textrm{d}x T(x)^2\exp[\theta^\textrm{T}T(x)] - \frac{\left(\int \textrm{d}x T(x)\exp[\theta^\textrm{T}T(x)]\right)^2}{Z(\theta)^2} \\
+&= \langle T(x)^2 \rangle_{P(x|\theta)} - \langle T(x) \rangle_{P(x|\theta)}^2 \\ 
+&= \textrm{Var}_{P(x|\theta)}[T(x)]
+\end{align*}
+
+Importantly, note that its second derivative with respect to $\theta$ (which is equal to the variance of $T(x)$) is positive semi-definite, meaning that $\phi(\theta)$ is convex in $\theta$. So if we can rewrite an optimization problem in terms of $\phi(\theta)$, we can hope to find the \emph{global} optimum. We can do this by considering the \emph{conjugate dual function} of the log partition function: 
+\[ \psi(\mu) = \langle \log P(x|\theta) \rangle_{P(x|\theta)} = -\textrm{H}[P_\theta] = \theta^\textrm{T}\mu - \phi(\theta) \]
+where $\mu = \langle T(x) \rangle_{P(x|\theta)}$ is the expected sufficient statistic (also called the \emph{mean parameter}). This function - i.e. the negative entropy of $P_\theta$ - is \emph{dual} to the log partition function, since:
+\[ \frac{\partial \phi}{\partial \theta} = \mu \quad\quad \frac{\partial \psi}{\partial \mu} = \theta \]
+We can see that they are conjugate in the optimization sense by considering the KL divergence between some proposed distribution $P(x|\theta')$ and a target distribution $P(x|\theta)$ with the same form but different parameters:
+\begin{align*}
+\textrm{KL}[P(x|\theta)\|P(x|\theta')] &= \langle \log P(x|\theta) \rangle_{P(x|\theta)} - \langle \log P(x|\theta') \rangle_{P(x|\theta)} \\
+&= \theta^\textrm{T}\mu - \phi(\theta) - ({\theta'}^\textrm{T}\mu - \phi(\theta')) \\
+&= \psi(\mu) - ({\theta'}^\textrm{T}\mu - \phi(\theta')) \geq 0 \\
+\Leftrightarrow \psi(\mu) &\geq {\theta'}^\textrm{T}\mu - \phi(\theta') \\
+\Rightarrow \psi(\mu) &= \underset{\theta'}{\sup}\; {\theta'}^\textrm{T}\mu - \phi(\theta') \\
+\theta(\mu) &= \underset{\theta'}{\arg\max}\; {\theta'}^\textrm{T}\mu - \phi(\theta') \\
+\Rightarrow \phi(\theta) &= \underset{\mu'}{\sup}\; {\theta}^\textrm{T}\mu' - \psi(\mu') \\
+\mu(\theta) &= \underset{\mu'}{\arg\max}\; {\theta}^\textrm{T}\mu' - \psi(\mu') \\
+\end{align*}
+This example illustrates the fact that any exponential family distribution can be equivalently parameterized by its expected sufficient statistics rather than by its natural parameters.
+
+We can exploit this duality for inference in a latent variable model with an exponential family observation-latent joint:
+\begin{align*}
+P(\mathcal{X},\mathcal{Y}|\theta) &= \exp[\theta^\textrm{T}T(\mathcal{X},\mathcal{Y}) - \phi(\theta)] \\
+\Rightarrow P(\mathcal{Y}|\mathcal{X},\theta) &= \exp[\theta^\textrm{T}T(\mathcal{Y}|\mathcal{X}) - \phi_y(\theta)]
+\end{align*}
+where $T(\mathcal{Y}|\mathcal{X}) = T(\mathcal{X},\mathcal{Y})$ with all $x\in\mathcal{X}$ clamped to their observations. In other words, I have chosen to parametrize the posterior on latents with the same natural parameters (likely a redundant, but still valid, parametrization). This then yields the following log likelihood:
+\begin{align*}
+\ell(\theta) &= \log P(\mathcal{X},\mathcal{Y}|\theta) - \log P(\mathcal{Y}|\mathcal{X},\theta) \\
+&= \theta^\textrm{T}T(\mathcal{X},\mathcal{Y}) - \phi(\theta) - (\theta^\textrm{T}T(\mathcal{Y}|\mathcal{X}) - \phi_y(\theta)) \\
+&= \phi_y(\theta) - \phi(\theta) \\
+&= \underset{\mu_y}{\sup}\; \theta^\textrm{T}\mu_y - \psi(\mu_y) - \phi(\theta) \\
+&= \underset{\mu_y}{\sup}\; \langle \log P(\mathcal{X},\mathcal{Y}|\theta) \rangle_{P(x|\theta)} - \psi(\mu_y) \\
+&= \underset{\mu_y}{\sup}\; \mathcal{F}(\theta,\mu_y) \quad\quad \text{[E-step]}
+\end{align*}
+which yields the exact same free energy lower bound that we maximize in EM. We might thus try to perform inference (i.e. an E-step) by solving the optimization problem:
+\begin{align*}
+\mu_y^* &= \underset{\mu_y}{\arg\max}\; {\theta}^\textrm{T}\mu_y - \psi(\mu_y) - \phi(\theta) \\
+&= \underset{\mu_y}{\arg\max}\; \theta^\textrm{T}\mu_y - \psi(\mu_y)
+\end{align*}
+since this is the $\mu_y$ that will maximize the free energy lower bound on the log likelihood. Noting that
+\[ \theta^\textrm{T}\mu_y - \psi(\mu_y) = \phi_y(\theta) \]
+we know that the optimization problem is convex, since the objective function (equal to the log partition function) is concave \todo{is the reason we know this because it equals to log partition function which is a logarithm?} and we are optimizing over a convex set (since $\mu_y = \sum P(\mathcal{Y}|\mathcal{X},\theta) T(\mathcal{X,Y})$ is a weighted sum with weights $\sum_\mathcal{Y} P(\mathcal{Y}|\mathcal{X},\theta) = 1$ that sum to one). Thus, if we perform inference by solving this optimization problem, we can be sure we have found the global optimum. Furthermore, we can directly optimize the mean sufficient statistics rather than optimizing a (exact/approximate) posterior over latents $q$ and then computing its expected sufficients (which we then use in the M-step).
+
+However, solving this optimization problem is often too difficult, mainly for two reasons:
+\begin{enumerate}
+\item $\psi(\mu_y)$ is generally very hard to compute
+\item We want to restrict our optimization to the set $\mathcal{M}$ of feasible means $\mu_y$ - called the \emph{marginal polytope} -, which can be a complicated set. For example, for a Boltzmann machine with two binary variables,
+\begin{gather*}
+T(\mathcal{X}) = \begin{bmatrix} x_1 & x_2 & x_1x_2 \end{bmatrix}^\textrm{T} \\
+\mathcal{M} = \text{convex hull}\left( \left\{ \begin{bmatrix} 1 \\ 0 \\ 0 \end{bmatrix}, \begin{bmatrix} 0 \\ 1 \\ 0 \end{bmatrix}, \begin{bmatrix} 1 \\ 1 \\ 1 \end{bmatrix}, \begin{bmatrix} 0 \\ 0 \\ 0 \end{bmatrix} \right\} \right)
+\end{gather*}
+\end{enumerate}
+The usual solution is to approximate $\psi(\mu_y)$ and relax $\mathcal{M}$ to some larger and still reasonable set $\mathcal{L}$. In certain cases, this ends up being equivalent to maximizing the Bethe free energy approximate lower bound on the log likelihood (e.g. see section \ref{mrfs} on inference for MRFs).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%% APPENDICES %%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Probability Distributions}
+\begin{table}[H]
+\centering
+\begin{tabular}{l|l|l|l|l|l|l|l}
+Name & Domain & PDF & $\mathbb{E}[x]$ & $\textrm{Var}[x_i]$ & $\textrm{cov}[x_i,x_j]$ \\\hline
+$\mathcal{N}(\mu,\Sigma)$ & $\mathbb{R}^D$ & $|2\pi\Sigma|^{-\frac{1}{2}}e^{(\mathbf{x} - \mu)^\textrm{T}\Sigma^{-1}(\mathbf{x}-\mu)}$ & $\mu$ & $\Sigma_{ii}$ & $\Sigma_{ij} = \Sigma_{ji}$ \\
+$\textrm{Gamma}(\alpha,\beta)$ & $\mathbb{R}$ & $\frac{\beta^\alpha}{\Gamma(\alpha)} x^{\alpha - 1}e^{-\beta x}$ & $\frac{\alpha}{\beta}$ & $\frac{\alpha}{\beta^2}$ & - \\
+$\textrm{Bernoulli}(p)$ & $\{0,1\}$ & $p^x(1-p)^{1-x}$ & $p$ & $p(1-p)$ & - \\
+$\textrm{Binomial}(n,p)$ & $\mathbb{Z}_+$ & $\binom{n}{x}p^x(1-p)^{n-x}$ & $np$ & $np(1-p)$ & - \\
+$\textrm{Multinomial}(n,\mathbf{p})$ & $\mathbb{Z}_+^D$ & $\frac{n!}{x_1!x_2!\ldots x_D!} \prod_{d=1}^D p_d^{x_d}$ & $n \mathbf{p}$ & $np_i(1-p_i)$ & $-np_ip_j$ \\
+$\textrm{Beta}(\alpha,\beta)$ & $[0,1]$ & $\frac{1}{B(\alpha,\beta)} x^{\alpha - 1}(1-x)^{\beta-1}$ & $\frac{\alpha}{\alpha + \beta}$ & $\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$ & - \\
+$\textrm{Dir}(\alpha)$ & $[0,1]^D$ & $\frac{\Gamma(\sum_k\alpha_k)}{\prod_k\Gamma(\alpha_k)} \prod_k x_k^{\alpha - 1}$ & $\frac{1}{\sum_k \alpha_k}\alpha$ & $\frac{\alpha_k(\alpha_0-\alpha_k)}{\alpha_0^2(\alpha_0+1)}$ & $-\frac{\alpha_k\alpha_{k'}}{\alpha_0^2(\alpha_0+1)}$ \\
+$\textrm{Po}(\lambda)$ & $\mathbb{Z}_+$ & $\frac{\lambda^x e^{-\lambda}}{x!}$ & $\lambda$ & $\lambda$ & - \\
+\end{tabular}
+\end{table}
+
+\subsection{Conjugate Priors}
+\begin{table}[H]
+\centering
+\begin{tabular}{l|c|l}
+Likelihood & Parameter & Conjugate Prior \\\hline
+Bernoulli, Binomial & $p$ & Beta \\
+Multinomial & $\mathbf{p}$ & Dirichlet \\
+Gaussian & $\mu$ & Gaussian \\
+Gaussian & $\Sigma$ & Gamma \\
+Poisson & $\lambda$ & Gamma
+\end{tabular}
+\end{table}
+
+\subsection{Notes about Dirichlet Distribution}
+The Dirichlet distribution with $\alpha = \begin{bmatrix}1 && ldots && 1 \end{bmatrix}$ is the uniform distribution over all $K$-dimensional simplexes, i.e. all $K$-dimensional $\mathbf{x}$ with $x_k \in [0,1], \sum_k x_k = 1$.
+
+The marginal distribution over one of the components $x_k$ is a beta distribution:
+\[ \int_0^1 \textrm{d}x_{\neg k} \textrm{Dir}(\mathbf{x}|\alpha)  = \textrm{Beta}\left(x_k|\alpha_k, \sum_{k' \neq k}\alpha_{k'}\right) \]
+
+\section{Gaussian Identities}
+Useful to remember the exponential family form:
+\begin{gather*}
+\mathcal{N}(\mathbf{x}|\mu,\Sigma) = \frac{e^{-\frac{1}{2}\mu^\textrm{T}\Sigma^{-1}\mu}}{\sqrt{|2\pi\Sigma|}} \exp\left[ \theta^\textrm{T}T(\mathbf{x}) \right] \\
+T(\mathbf{x}) = \begin{bmatrix} \mathbf{x} \\ \textrm{vec}(\mathbf{xx}^\textrm{T}) \end{bmatrix} \\
+\theta = \begin{bmatrix} \Sigma^{-1}\mu \\ -\frac{1}{2}\textrm{vec}(\Sigma^{-1}) \end{bmatrix}
+\end{gather*}
+with sufficient statistics $T(\mathbf{x})$ and natural parameters $\theta$. Thus, the product of two Gaussians distributions of the same variable but with different parameters is:
+\begin{gather*}
+\mathcal{N}(\mathbf{x}|\mathbf{a},\mathbf{A})\mathcal{N}(\mathbf{x}|\mathbf{b},\mathbf{B}) \propto \mathcal{N}(\mathbf{x}|\mathbf{C}(\mathbf{A}^{-1}\mathbf{a} + \mathbf{B}^{-1}\mathbf{b}),\mathbf{C}) \\
+\mathbf{C} = (\mathbf{A}^{-1} + \mathbf{B}^{-1})^{-1}
+\end{gather*}
+
+For any probability distribution over some random variable $\mathbf{x}$, 
+\begin{align*}
+\mathbb{E}\left[\mathbf{Ax}+\mathbf{b}\right] &= \mathbf{A}\mathbb{E}[\mathbf{x}] + \mathbf{b} \\
+\textrm{cov}\left[\mathbf{Ax}+\mathbf{b}\right] &= \mathbf{A}\textrm{cov}[\mathbf{x}]\mathbf{A}^\textrm{T}
+\end{align*}
+Furthermore, if $x$ is conditionally dependent on some other random variable $y$, then the marginal moments are always given by
+\begin{align*}
+\mathbb{E}_{P(x)}[x] &= \mathbb{E}_{P(y)}\left[\mathbb{E}_{P(x|y)}[x]\right] \\
+\textrm{cov}_{P(x)}[x] &= \mathbb{E}_{P(y)}\left[\textrm{cov}_{P(x|y)}[x]\right] + \textrm{cov}_{P(y)}\left[\mathbb{E}_{P(x|y)}[x]\right]
+\end{align*}
+
+
+So, for a pair of Gaussian random variables
+\begin{gather*}
+\mathbf{y} \sim  \mathcal{N}(\mathbf{\mu}_y,\Sigma_y)\\
+\mathbf{x}|\mathbf{y} \sim \mathcal{N}(\mathbf{A}\mathbf{y}+\mathbf{b},\Sigma_x)
+\end{gather*}
+The posterior over $\mathbf{y}$ and marginal over $\mathbf{x}$ are:
+\begin{gather*}
+P(\mathbf{y}|\mathbf{x}) = \mathcal{N}(\mathbf{y}|\Sigma_{y|x}(\Sigma_y^{-1}\mu_y + \mathbf{A}^\textrm{T}\Sigma_x^{-1}(\mathbf{x} - \mathbf{b}), \Sigma_{y|x}) \\
+\Sigma_{y|x} = (\Sigma_y^{-1} + \mathbf{A}^\textrm{T}\Sigma_x^{-1}\mathbf{A})^{-1} \\
+P(\mathbf{x}) = \mathcal{N}(\mathbf{x}|\mathbf{A}\mu_y + \mathbf{b}, \Sigma_x + \mathbf{A}\Sigma_y \mathbf{A}^\textrm{T})
+\end{gather*}
+For a partitioned Gaussian,
+\[
+\mathbf{x}=
+\begin{bmatrix} 
+\mathbf{x}_a \\
+\mathbf{x}_b
+\end{bmatrix}
+\sim \mathcal{N}\left(
+\begin{bmatrix}
+\mu_a \\
+\mu_b
+\end{bmatrix}
+,
+\begin{bmatrix}
+\Sigma_{aa} & \Sigma_{ab} \\
+\Sigma_{ba} & \Sigma_{bb}
+\end{bmatrix}
+\right)
+\]
+we have:
+\begin{gather*}
+P(\mathbf{x}_a) = \mathcal{N}(\mathbf{x}_a|\mu_a,\Sigma_{aa}) \\
+P(\mathbf{x}_a|\mathbf{x}_b) = \mathcal{N}(\mathbf{x}_a|\mu_a + \Sigma_{ab}\Sigma_{bb}^{-1}(\mathbf{x}_b - \mu_b), \Sigma_{aa} - \Sigma_{ab}\Sigma_{bb}^{-1}\Sigma_{ba})
+\end{gather*}
+
+\section{Matrix Identities}
+\subsection{Basic Matrix Properties}
+\begin{align*}
+|\mathbf{AB}| &= |\mathbf{A}||\mathbf{B}| \Rightarrow |\mathbf{A}| = \frac{1}{|\mathbf{A}^{-1}} \\
+|\mathbf{A}| &= \prod_i \lambda_i \quad (\text{product of eigenvalues}) \\
+\textrm{Tr}[\mathbf{A}+\mathbf{B}] &= \textrm{Tr}[\mathbf{A}]+\textrm{Tr}[\mathbf{B}] \\
+\textrm{Tr}[\mathbf{A}] &= \textrm{Tr}[\mathbf{A}^\textrm{T}] \\
+\textrm{Tr}[\mathbf{ABC}\ldots] &= \textrm{Tr}[\mathbf{BC}\ldots\mathbf{A}] = \textrm{Tr}[\mathbf{C}\ldots \mathbf{AB}] = \ldots \\
+\textrm{Tr}[\mathbf{A}] &= \sum_i \lambda_i \\
+(\mathbf{A} + \mathbf{UBV})^{-1} &= \mathbf{A}^{-1} - \mathbf{A}^{-1}\mathbf{U}(\mathbf{B}^{-1}+\mathbf{V}\mathbf{A}^{-1}\mathbf{U})^{-1}\mathbf{V}\mathbf{A}^{-1} \quad(\text{Matrix Inversion Lemma}) \\
+\begin{bmatrix}
+\mathbf{A} & \mathbf{B} \\
+\mathbf{C} & \mathbf{D}
+\end{bmatrix}^{-1}
+&=
+\begin{bmatrix}
+\mathbf{M} & -\mathbf{MBD}^{-1} \\
+-\mathbf{D}^{-1}\mathbf{BM} & \mathbf{D}^{-1}+\mathbf{D}^{-1}\mathbf{CMB}\mathbf{D}^{-1}
+\end{bmatrix}
+, \quad \mathbf{M}=(\mathbf{A}-\mathbf{BD}^{-1}\mathbf{C})^{-1}
+\end{align*}
+Inverse of a symmetric matrix is also symmetric.
+
+\subsection{Vector Derivatives}
+\begin{align*}
+\frac{\partial}{\partial\mathbf{x}}\mathbf{a}^\textrm{T}\mathbf{x} &= \frac{\partial}{\partial\mathbf{x}}\mathbf{x}^\textrm{T}\mathbf{a} = \mathbf{a} \\
+\frac{\partial}{\partial\mathbf{x}}\mathbf{x}^\textrm{T}\mathbf{Ax} &= (\mathbf{A} + \mathbf{A}^\textrm{T})\mathbf{x} \\
+\frac{\partial}{\partial\mathbf{x}}\mathbf{Ax} &= \mathbf{A}^\textrm{T}
+\end{align*}
+
+\subsection{Matrix Derivatives}
+\begin{align*}
+\frac{\partial}{\partial\mathbf{X}}\log|\mathbf{X}| &= {(\mathbf{X}^{-1})}^\textrm{T}\\
+\frac{\partial}{\partial\mathbf{X}}\textrm{Tr}[\mathbf{AX}] = \frac{\partial}{\partial\mathbf{X}}\textrm{Tr}[\mathbf{XA}] &= \mathbf{A}^\textrm{T} \\
+\frac{\partial}{\partial\mathbf{X}}\textrm{Tr}[\mathbf{X}^\textrm{T}\mathbf{AX}] &= (\mathbf{A} + \mathbf{A}^\textrm{T})\mathbf{X} \\
+\frac{\partial}{\partial\mathbf{X}}\textrm{Tr}[\mathbf{X}^{-1}\mathbf{A}] &= -\mathbf{X}^{-1}\mathbf{A}^\textrm{T}\mathbf{X}^{-1} \\
+\frac{\partial}{\partial\mathbf{X}}\mathbf{Xa} &= \mathbf{1a}^\textrm{T} \\
+\frac{\partial}{\partial\mathbf{X}}\mathbf{a}^\textrm{T}\mathbf{Xb} &= \mathbf{ab}^\textrm{T} \\
+\frac{\partial}{\partial\mathbf{X}}\mathbf{a}^\textrm{T}\mathbf{X}^\textrm{T}\mathbf{CXb}^\textrm{T} &= \mathbf{C}^\textrm{T}\mathbf{Xab}^\textrm{T} + \mathbf{CXba}^\textrm{T}
+\end{align*}
+
+\end{document}
